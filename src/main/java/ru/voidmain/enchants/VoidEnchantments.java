@@ -8,6 +8,7 @@ import org.bukkit.entity.*;
 import org.bukkit.event.*;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
@@ -26,6 +27,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Set<UUID> drilling = new HashSet<>();
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
+    private final Set<UUID> wingsJumping = new HashSet<>();
 
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
     private final List<Spec> specs = List.of(
@@ -223,14 +225,19 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
         if(p.isSneaking() && has(p,"sneak") && p.isSprinting()) p.setWalkSpeed(0.2f);
         if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); }
-    }
-    @EventHandler public void onJump(PlayerJumpEvent e) {
-        Player p=e.getPlayer();
-        if(has(p,"wings") && p.isGliding() && p.getInventory().getChestplate()!=null) {
-            ItemStack chest=p.getInventory().getChestplate(); if(chest.getType()==Material.ELYTRA && chest.getItemMeta() instanceof Damageable d) {
-                int restore=(int)Math.ceil(chest.getType().getMaxDurability()*0.30);
-                d.setDamage(Math.max(0,d.getDamage()-restore)); chest.setItemMeta(d); p.sendMessage("§d✦ §fКрылья восстановили 30% прочности элитр!");
+        // Detect one jump per ground-to-air transition; Bukkit has no PlayerJumpEvent.
+        UUID uid = p.getUniqueId();
+        if (p.isOnGround()) {
+            wingsJumping.remove(uid);
+        } else if (!wingsJumping.contains(uid) && p.getVelocity().getY() > 0.12 && has(p,"wings")) {
+            ItemStack chest = p.getInventory().getChestplate();
+            if (chest != null && chest.getType() == Material.ELYTRA && chest.getItemMeta() instanceof Damageable d) {
+                int restore = (int) Math.ceil(chest.getType().getMaxDurability() * 0.30);
+                d.setDamage(Math.max(0, d.getDamage() - restore));
+                chest.setItemMeta(d);
+                p.sendMessage("§d✦ §fКрылья восстановили 30% прочности элитр!");
             }
+            wingsJumping.add(uid);
         }
     }
     @EventHandler public void onConsume(PlayerItemConsumeEvent e) {
