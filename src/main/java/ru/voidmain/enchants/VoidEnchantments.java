@@ -79,8 +79,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private ItemStack book(Spec s,int lvl) {
         ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta m = item.getItemMeta();
-        m.setDisplayName("§x§9§B§3§0§F§F§l"+s.name());
-        m.setLore(List.of("§7"+s.lore(),"","§dРедкость: §f"+(s.leveled()?"Улучшенное":"Особое"),"§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
+        m.setDisplayName(gradient(s.name()));
+        m.setLore(List.of("§7"+s.lore(),"",gradient("Редкость:")+" §f"+(s.leveled()?"Улучшенное":"Особое"),"§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
         m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
         m.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,lvl);
         item.setItemMeta(m);
@@ -106,7 +106,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             if(target==null || s==null) { sender.sendMessage("§cИгрок или зачарование не найдено."); return true; }
             int lvl=1; if(s.leveled() && args.length>3) try{lvl=Math.max(1,Math.min(s.max(),Integer.parseInt(args[3])));}catch(Exception ignored){}
             target.getInventory().addItem(book(s,lvl)).values().forEach(it->target.getWorld().dropItemNaturally(target.getLocation(),it));
-            sender.sendMessage("§dВыдано: §f"+s.name()+" "+roman(lvl)); return true;
+            sender.sendMessage(gradient("Выдано: "+s.name()+" "+roman(lvl))); return true;
         }
         if(sender instanceof Player p) openCatalog(p,0); else sender.sendMessage("Команда доступна игроку.");
         return true;
@@ -117,7 +117,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         for(int i=0;i<45 && start+i<specs.size();i++) {
             Spec s=specs.get(start+i);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            m.setDisplayName("§d§l"+s.name());
+            m.setDisplayName(gradient(s.name()));
             m.setLore(List.of("§7"+s.lore(),"","§7Тип: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),"§8Нажми, чтобы получить книгу"));
             m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
             icon.setItemMeta(m); inv.setItem(i,icon);
@@ -132,20 +132,84 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         Spec s=spec(key); if(s!=null) { p.getInventory().addItem(book(s,1)).values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it)); p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.5f); }
     }
 
-    @EventHandler public void protectAnvil(PrepareAnvilEvent e) {
-        ItemStack a=e.getInventory().getItem(0), b=e.getInventory().getItem(1);
-        String ka=id(a), kb=id(b);
-        if((ka!=null && singleTier.contains(ka)) || (kb!=null && singleTier.contains(kb))) e.setResult(null);
-    }
-    @EventHandler public void anvilClick(InventoryClickEvent e) {
-        if(!(e.getInventory() instanceof AnvilInventory)) return;
-        if(e.getRawSlot()==2) {
-            String a=id(e.getInventory().getItem(0)), b=id(e.getInventory().getItem(1));
-            if((a!=null && singleTier.contains(a)) || (b!=null && singleTier.contains(b))) {
-                e.setCancelled(true);
-                if(e.getWhoClicked() instanceof Player p) p.sendMessage("§cЭто зачарование нельзя объединять в наковальне. Книги сохранены.");
-            }
+    private String gradient(String input) {
+        int[][] colors = {{155,48,255},{190,112,255},{225,190,255},{255,255,255}};
+        StringBuilder out = new StringBuilder();
+        int visible = Math.max(1, input.length()-1);
+        for (int i=0;i<input.length();i++) {
+            double t = (double)i/visible*(colors.length-1);
+            int seg = Math.min(colors.length-2,(int)t);
+            double f = t-seg;
+            int r=(int)(colors[seg][0]+(colors[seg+1][0]-colors[seg][0])*f);
+            int g=(int)(colors[seg][1]+(colors[seg+1][1]-colors[seg][1])*f);
+            int b=(int)(colors[seg][2]+(colors[seg+1][2]-colors[seg][2])*f);
+            out.append(String.format("§x§%x§%x§%x§%x§%x§%x",r>>4,r&15,g>>4,g&15,b>>4,b&15)).append(input.charAt(i));
         }
+        return out.toString();
+    }
+    private boolean supports(String key, Material type) {
+        return switch(key) {
+            case "magnet","drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
+            case "vampirism","frost","venom","execution" -> type.name().endsWith("_SWORD");
+            case "thunder" -> type==Material.MACE;
+            case "dragonbreath" -> type.name().endsWith("_CHESTPLATE");
+            case "sneak","diver" -> type.name().endsWith("_LEGGINGS");
+            case "immunity" -> type.name().endsWith("_HELMET") || type.name().endsWith("_CHESTPLATE") || type.name().endsWith("_LEGGINGS") || type.name().endsWith("_BOOTS");
+            case "softsteps","lavawalker" -> type.name().endsWith("_BOOTS");
+            case "owl","wisdom" -> type.name().endsWith("_HELMET");
+            case "sniper" -> type==Material.BOW || type==Material.CROSSBOW;
+            case "wings","hover","windspeed" -> type==Material.ELYTRA;
+            default -> false;
+        };
+    }
+    private void putCustomEnchant(ItemStack target, Spec enchant, int lvl) {
+        ItemMeta meta=target.getItemMeta();
+        meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,enchant.key());
+        meta.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,lvl);
+        List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
+        lore.add(gradient(enchant.name())+" §7"+(enchant.leveled()?roman(lvl):"I"));
+        meta.setLore(lore);
+        target.setItemMeta(meta);
+    }
+    @EventHandler public void prepareAnvil(PrepareAnvilEvent e) {
+        AnvilInventory inv=e.getInventory();
+        ItemStack left=inv.getItem(0), right=inv.getItem(1);
+        String leftKey=id(left), rightKey=id(right);
+        boolean leftBook=left!=null && left.getType()==Material.ENCHANTED_BOOK && leftKey!=null;
+        boolean rightBook=right!=null && right.getType()==Material.ENCHANTED_BOOK && rightKey!=null;
+        if(!leftBook && !rightBook) return;
+
+        if(leftBook && rightBook) {
+            Spec a=spec(leftKey), b=spec(rightKey);
+            if(a==null || b==null || !leftKey.equals(rightKey) || !a.leveled() ||
+               level(left)!=level(right) || level(left)>=a.max()) { e.setResult(null); return; }
+            e.setResult(book(a,level(left)+1));
+            inv.setRepairCost(4+level(left));
+            return;
+        }
+
+        ItemStack enchantedBook=leftBook?left:right;
+        ItemStack target=leftBook?right:left;
+        String key=id(enchantedBook);
+        Spec enchant=spec(key);
+        if(target==null || target.getType()==Material.AIR || enchant==null ||
+           !supports(key,target.getType()) || id(target)!=null) {
+            e.setResult(null);
+            return;
+        }
+        ItemStack result=target.clone();
+        putCustomEnchant(result,enchant,level(enchantedBook));
+        e.setResult(result);
+        inv.setRepairCost(3);
+    }
+    @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
+        if(Math.random()>0.35) return;
+        Spec chosen=specs.get(new Random().nextInt(specs.size()));
+        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        ItemStack reward=book(chosen,lvl);
+        org.bukkit.inventory.MerchantRecipe recipe=new org.bukkit.inventory.MerchantRecipe(reward,3);
+        recipe.addIngredient(new ItemStack(Material.EMERALD,8+new Random().nextInt(17)));
+        e.setRecipe(recipe);
     }
 
     @EventHandler public void onMine(BlockBreakEvent e) {
@@ -235,7 +299,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 int restore = (int) Math.ceil(chest.getType().getMaxDurability() * 0.30);
                 d.setDamage(Math.max(0, d.getDamage() - restore));
                 chest.setItemMeta(d);
-                p.sendMessage("§d✦ §fКрылья восстановили 30% прочности элитр!");
+                p.sendMessage(gradient("✦ Крылья восстановили 30% прочности элитр!"));
             }
             wingsJumping.add(uid);
         }
