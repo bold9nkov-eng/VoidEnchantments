@@ -67,20 +67,66 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
 
     private Spec spec(String key) { return specs.stream().filter(s -> s.key().equalsIgnoreCase(key)).findFirst().orElse(null); }
+    private NamespacedKey itemEnchantKey(String key) { return new NamespacedKey(this, "ce_" + key); }
+    private Set<String> enchantKeys(ItemStack item) {
+        Set<String> keys=new LinkedHashSet<>();
+        if(item==null || !item.hasItemMeta()) return keys;
+        var pdc=item.getItemMeta().getPersistentDataContainer();
+        String legacy=pdc.get(enchantKey,PersistentDataType.STRING);
+        if(legacy!=null) keys.add(legacy);
+        for(Spec spec:specs) if(pdc.has(itemEnchantKey(spec.key()),PersistentDataType.INTEGER)) keys.add(spec.key());
+        return keys;
+    }
     private String id(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return null;
-        return item.getItemMeta().getPersistentDataContainer().get(enchantKey,PersistentDataType.STRING);
+        if(item==null || !item.hasItemMeta()) return null;
+        String bookId=item.getItemMeta().getPersistentDataContainer().get(enchantKey,PersistentDataType.STRING);
+        return bookId!=null?bookId:enchantKeys(item).stream().findFirst().orElse(null);
+    }
+    private boolean hasEnchant(ItemStack item,String key) {
+        if(item==null || !item.hasItemMeta()) return false;
+        var pdc=item.getItemMeta().getPersistentDataContainer();
+        return key.equals(pdc.get(enchantKey,PersistentDataType.STRING)) || pdc.has(itemEnchantKey(key),PersistentDataType.INTEGER);
+    }
+    private int enchantLevel(ItemStack item,String key) {
+        if(item==null || !item.hasItemMeta()) return 0;
+        Integer value=item.getItemMeta().getPersistentDataContainer().get(itemEnchantKey(key),PersistentDataType.INTEGER);
+        return value!=null?value:(key.equals(id(item))?level(item):0);
     }
     private int level(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return 1;
         Integer n = item.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
         return n == null ? 1 : n;
     }
+    private int rarityTier(Spec s) { return switch(s.key()) {
+        case "wings","execution","thunder" -> 1;
+        case "drill","vampirism","sniper","windspeed" -> 2;
+        case "veinminer","hover","lavawalker","dragonbreath" -> 3;
+        case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
+        default -> 5;
+    }; }
+    private String rarityName(int t) { return switch(t) {
+        case 1 -> "Божественное"; case 2 -> "Легендарное"; case 3 -> "Эпическое"; case 4 -> "Редкое"; default -> "Необычное";
+    }; }
+    private String rarityColor(int t) { return switch(t) {
+        case 1 -> "§c"; case 2 -> "§6"; case 3 -> "§5"; case 4 -> "§b"; default -> "§a";
+    }; }
+    private String appliesTo(Spec s) { return switch(s.key()) {
+        case "magnet","drill","autosmelt","veinminer","haste","experience" -> "Кирка";
+        case "vampirism","frost","venom","execution" -> "Меч";
+        case "thunder" -> "Булава"; case "dragonbreath" -> "Нагрудник";
+        case "sneak","diver" -> "Поножи"; case "immunity" -> "Любая броня";
+        case "softsteps","lavawalker" -> "Ботинки"; case "owl","wisdom" -> "Шлем";
+        case "sniper" -> "Лук или арбалет"; case "wings","hover","windspeed" -> "Элитры";
+        default -> "Неизвестно";
+    }; }
     private ItemStack book(Spec s,int lvl) {
         ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta m = item.getItemMeta();
-        m.setDisplayName(gradient(s.name()));
-        m.setLore(List.of("§7"+s.lore(),"",gradient("Редкость:")+" §f"+(s.leveled()?"Улучшенное":"Особое"),"§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
+        int tier=rarityTier(s);
+        m.setDisplayName(rarityColor(tier)+s.name());
+        m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+            "§7Редкость: "+rarityColor(tier)+rarityName(tier),
+            "§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
         m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
         m.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,lvl);
         item.setItemMeta(m);
@@ -89,12 +135,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private String roman(int n) { return switch(n){case 1->"I";case 2->"II";case 3->"III";case 4->"IV";default->String.valueOf(n);}; }
     private ItemStack held(Player p) { return p.getInventory().getItemInMainHand(); }
     private boolean has(Player p,String key) {
-        for (ItemStack it : p.getInventory().getArmorContents()) if (key.equals(id(it))) return true;
-        return key.equals(id(held(p))) || key.equals(id(p.getInventory().getItemInOffHand()));
+        for(ItemStack it:p.getInventory().getArmorContents()) if(hasEnchant(it,key)) return true;
+        return hasEnchant(held(p),key)||hasEnchant(p.getInventory().getItemInOffHand(),key);
     }
     private int equippedLevel(Player p,String key) {
         ItemStack[] all = new ItemStack[]{held(p),p.getInventory().getItemInOffHand(),p.getInventory().getHelmet(),p.getInventory().getChestplate(),p.getInventory().getLeggings(),p.getInventory().getBoots()};
-        for(ItemStack it:all) if(key.equals(id(it))) return level(it);
+        for(ItemStack it:all) if(hasEnchant(it,key)) return enchantLevel(it,key);
         return 0;
     }
 
@@ -117,8 +163,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         for(int i=0;i<45 && start+i<specs.size();i++) {
             Spec s=specs.get(start+i);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            m.setDisplayName(gradient(s.name()));
-            m.setLore(List.of("§7"+s.lore(),"","§7Тип: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),"§8Нажми, чтобы получить книгу"));
+            int tier=rarityTier(s);
+            m.setDisplayName(rarityColor(tier)+s.name());
+            m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+                "§7Редкость: "+rarityColor(tier)+rarityName(tier),
+                "§7Тип: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),"§8Нажми, чтобы получить книгу"));
             m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
             icon.setItemMeta(m); inv.setItem(i,icon);
         }
@@ -164,10 +213,10 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     private void putCustomEnchant(ItemStack target, Spec enchant, int lvl) {
         ItemMeta meta=target.getItemMeta();
-        meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,enchant.key());
-        meta.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,lvl);
+        meta.getPersistentDataContainer().set(itemEnchantKey(enchant.key()),PersistentDataType.INTEGER,lvl);
         List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
-        lore.add(gradient(enchant.name())+" §7"+(enchant.leveled()?roman(lvl):"I"));
+        int tier=rarityTier(enchant);
+        lore.add(rarityColor(tier)+enchant.name()+" §7"+(enchant.leveled()?roman(lvl):"I"));
         meta.setLore(lore);
         target.setItemMeta(meta);
     }
@@ -193,7 +242,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         String key=id(enchantedBook);
         Spec enchant=spec(key);
         if(target==null || target.getType()==Material.AIR || enchant==null ||
-           !supports(key,target.getType()) || id(target)!=null) {
+           !supports(key,target.getType()) || hasEnchant(target,key) ||
+           (target.getType()==Material.ELYTRA && (hasEnchant(target,"wings") || key.equals("wings") && !enchantKeys(target).isEmpty()))) {
             e.setResult(null);
             return;
         }
@@ -213,17 +263,17 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
 
     @EventHandler public void onMine(BlockBreakEvent e) {
-        Player p=e.getPlayer(); ItemStack tool=held(p); String ench=id(tool);
-        if(ench==null) return;
-        if(ench.equals("haste")) p.addPotionEffect(new PotionEffect(PotionEffectType.HASTE,100,level(tool)-1,true,false));
-        if(ench.equals("magnet")) Bukkit.getScheduler().runTask(this,()->{
+        Player p=e.getPlayer(); ItemStack tool=held(p); Set<String> enchants=enchantKeys(tool);
+        if(enchants.isEmpty()) return;
+        if(enchants.contains("haste")) p.addPotionEffect(new PotionEffect(PotionEffectType.HASTE,100,enchantLevel(tool,"haste")-1,true,false));
+        if(enchants.contains("magnet")) Bukkit.getScheduler().runTask(this,()->{
             for(Entity ent:p.getNearbyEntities(6,6,6)) if(ent instanceof Item drop) {
                 ItemStack stack=drop.getItemStack().clone();
                 Map<Integer,ItemStack> rest=p.getInventory().addItem(stack);
                 if(rest.isEmpty()) drop.remove(); else drop.setItemStack(rest.values().iterator().next());
             }
         });
-        if(ench.equals("autosmelt")) {
+        if(enchants.contains("autosmelt")) {
             Collection<ItemStack> drops=e.getBlock().getDrops(tool,p);
             List<ItemStack> cooked=new ArrayList<>();
             for(ItemStack d:drops) {
@@ -232,7 +282,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             }
             e.setDropItems(false); Bukkit.getScheduler().runTask(this,()->cooked.forEach(d->p.getWorld().dropItemNaturally(e.getBlock().getLocation(),d)));
         }
-        if(ench.equals("drill") && drilling.add(p.getUniqueId())) {
+        if(enchants.contains("drill") && drilling.add(p.getUniqueId())) {
             Block center=e.getBlock(); World w=center.getWorld();
             Bukkit.getScheduler().runTask(this,()->{
                 try {
@@ -245,7 +295,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 } finally { drilling.remove(p.getUniqueId()); }
             });
         }
-        if(ench.equals("veinminer")) {
+        if(enchants.contains("veinminer")) {
             Material type=e.getBlock().getType();
             if(type.name().endsWith("_ORE") || type==Material.ANCIENT_DEBRIS) {
                 Location origin=e.getBlock().getLocation();
