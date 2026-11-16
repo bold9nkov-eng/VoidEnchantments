@@ -252,14 +252,30 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         e.setResult(result);
         inv.setRepairCost(3);
     }
+    private Spec weightedSpec() {
+        int roll=new Random().nextInt(10000);
+        int tier=roll<5?1:roll<35?2:roll<235?3:roll<1735?4:5;
+        List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==tier).toList();
+        return pool.get(new Random().nextInt(pool.size()));
+    }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
-        if(Math.random()>0.35) return;
-        Spec chosen=specs.get(new Random().nextInt(specs.size()));
+        if(Math.random()>0.20) return;
+        Spec chosen=weightedSpec();
         int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
-        ItemStack reward=book(chosen,lvl);
-        org.bukkit.inventory.MerchantRecipe recipe=new org.bukkit.inventory.MerchantRecipe(reward,3);
+        org.bukkit.inventory.MerchantRecipe recipe=new org.bukkit.inventory.MerchantRecipe(book(chosen,lvl),3);
         recipe.addIngredient(new ItemStack(Material.EMERALD,8+new Random().nextInt(17)));
         e.setRecipe(recipe);
+    }
+    @EventHandler public void villagerDeath(org.bukkit.event.entity.EntityDeathEvent e) {
+        if(!(e.getEntity() instanceof Villager)) return;
+        Spec chosen=weightedSpec();
+        double chance=switch(rarityTier(chosen)) {
+            case 1 -> 0.0005; case 2 -> 0.0015; case 3 -> 0.005; case 4 -> 0.015; default -> 0.04;
+        };
+        if(Math.random()<chance) {
+            int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+            e.getDrops().add(book(chosen,lvl));
+        }
     }
 
     @EventHandler public void onMine(BlockBreakEvent e) {
