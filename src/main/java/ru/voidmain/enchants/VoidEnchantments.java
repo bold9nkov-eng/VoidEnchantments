@@ -231,7 +231,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             wingsJumping.remove(uid);
         } else if (!wingsJumping.contains(uid) && p.getVelocity().getY() > 0.12 && has(p,"wings")) {
             ItemStack chest = p.getInventory().getChestplate();
-            if (chest != null && chest.getType() == Material.ELYTRA && chest.getItemMeta() instanceof Damageable d) {
+            if (chest != null && chest.getType() == Material.ELYTRA && chest.getItemMeta() instanceof org.bukkit.inventory.meta.Damageable d) {
                 int restore = (int) Math.ceil(chest.getType().getMaxDurability() * 0.30);
                 d.setDamage(Math.max(0, d.getDamage() - restore));
                 chest.setItemMeta(d);
