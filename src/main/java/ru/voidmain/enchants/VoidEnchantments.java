@@ -310,14 +310,15 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
 
     @EventHandler public void onHit(EntityDamageByEntityEvent e) {
         if(!(e.getDamager() instanceof Player p)) return;
-        ItemStack weapon=held(p); String k=id(weapon); if(k==null)return;
-        int lvl=level(weapon); UUID uid=p.getUniqueId();
-        if(k.equals("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30) e.setDamage(e.getDamage()*2);
-        if(k.equals("vampirism") && hitCounters.merge(uid,1,Integer::sum)%5==0) p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+lvl));
+        ItemStack weapon=held(p); Set<String> keys=enchantKeys(weapon); if(keys.isEmpty())return;
+        UUID uid=p.getUniqueId();
+        if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30) e.setDamage(e.getDamage()*2);
+        int hit=hitCounters.merge(uid,1,Integer::sum);
+        if(keys.contains("vampirism") && hit%5==0) p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));
         if(e.getEntity() instanceof LivingEntity target) {
-            if(k.equals("frost") && hitCounters.merge(uid,1,Integer::sum)%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));
-            if(k.equals("venom") && hitCounters.merge(uid,1,Integer::sum)%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));
-            if(k.equals("thunder") && Math.random()<0.10*lvl) target.getWorld().strikeLightningEffect(target.getLocation());
+            if(keys.contains("frost") && hit%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));
+            if(keys.contains("venom") && hit%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));
+            if(keys.contains("thunder") && Math.random()<0.10*enchantLevel(weapon,"thunder")) target.getWorld().strikeLightningEffect(target.getLocation());
         }
     }
     @EventHandler public void onDamage(EntityDamageEvent e) {
