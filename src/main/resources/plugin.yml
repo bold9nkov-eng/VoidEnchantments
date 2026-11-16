@@ -1,0 +1,13 @@
+name: VoidEnchantments
+version: 1.0.0
+main: ru.voidmain.enchants.VoidEnchantments
+api-version: '1.21'
+author: VoidMain
+commands:
+  voidenchants:
+    aliases: [ve, enchants]
+    description: Каталог зачарований VoidMain
+    usage: /voidenchants
+permissions:
+  voidenchants.admin:
+    default: op
