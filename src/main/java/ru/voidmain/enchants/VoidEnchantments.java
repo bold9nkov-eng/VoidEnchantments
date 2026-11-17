@@ -725,15 +725,37 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10)
             attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0));
     }
+    private void makeSurface(Player p, Material source, Material replacement, long ticks, boolean lava) {
+        Block under=p.getLocation().subtract(0,1,0).getBlock(); if(under.getType()!=source)return;
+        int cx=under.getX(),cy=under.getY(),cz=under.getZ();
+        for(int x=-2;x<=2;x++) for(int z=-2;z<=2;z++) {
+            if(x*x+z*z>5)continue;
+            Block b=under.getWorld().getBlockAt(cx+x,cy,cz+z); if(b.getType()!=source)continue;
+            Location loc=b.getLocation(); b.setType(replacement,false); if(lava)lavaBlocks.add(loc);
+            Bukkit.getScheduler().runTaskLater(this,()->{Block now=loc.getBlock();if(now.getType()==replacement)now.setType(source,false);lavaBlocks.remove(loc);},ticks);
+        }
+    }
+
     @EventHandler public void onMove(PlayerMoveEvent e) {
         Player p=e.getPlayer();
         if(has(p,"owl") && !p.hasPotionEffect(PotionEffectType.NIGHT_VISION)) p.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,260,0,true,false));
         updateRadar(p);
-        if(has(p,"lavawalker")) {
-            Block under=p.getLocation().subtract(0,1,0).getBlock();
-            if(under.getType()==Material.LAVA) for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){Block b=under.getRelative(x,0,z);if(b.getType()==Material.LAVA){b.setType(Material.OBSIDIAN);Location blockLoc=b.getLocation();Bukkit.getScheduler().runTaskLater(this,()->{Block current=blockLoc.getBlock();if(current.getType()==Material.OBSIDIAN)current.setType(Material.LAVA);},80L);}}
+        if(has(p,"lavawalker")) makeSurface(p,Material.LAVA,Material.OBSIDIAN,80L,true);
+        if(has(p,"waterwalker")) makeSurface(p,Material.WATER,Material.BLUE_ICE,60L,false);
+        if(has(p,"sneak")) {
+            var attr=p.getAttribute(org.bukkit.attribute.Attribute.SNEAKING_SPEED);
+            if(attr!=null) {
+                if(p.isSneaking()) { sneakSpeeds.putIfAbsent(p.getUniqueId(),attr.getBaseValue()); attr.setBaseValue(1.0); }
+                else { Double old=sneakSpeeds.remove(p.getUniqueId()); if(old!=null)attr.setBaseValue(old); }
+            }
         }
-        if(has(p,"sneak")) { if(p.isSneaking()) { sneakSpeeds.putIfAbsent(p.getUniqueId(),p.getWalkSpeed()); p.setWalkSpeed(0.2f); } else { Float old=sneakSpeeds.remove(p.getUniqueId()); if(old!=null && Math.abs(p.getWalkSpeed()-0.2f)<0.001f)p.setWalkSpeed(old); } }
+        if(has(p,"shadow") && p.isSneaking()) {
+            UUID id=p.getUniqueId(); Location now=p.getLocation(), prev=shadowPositions.get(id);
+            boolean moved=prev==null || prev.getWorld()!=now.getWorld() || prev.distanceSquared(now)>0.0025;
+            if(moved) { shadowSince.put(id,System.currentTimeMillis()); shadowPositions.put(id,now.clone()); }
+            else if(System.currentTimeMillis()-shadowSince.getOrDefault(id,System.currentTimeMillis())>=5000L)
+                p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY,40,0,true,false));
+        } else { shadowSince.remove(p.getUniqueId()); shadowPositions.remove(p.getUniqueId()); }
         if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); }
         // Detect one jump per ground-to-air transition; Bukkit has no PlayerJumpEvent.
         UUID uid = p.getUniqueId();
