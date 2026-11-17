@@ -518,8 +518,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(!(e.getEntity() instanceof Villager)) return;
         Spec chosen=weightedSpec();
         if(chosen==null) return;
-        double chance=Math.max(0.0,Math.min(100.0,dropChance(chosen)))/100.0;
-        if(Math.random()>=chance) return;
+        // Guaranteed: every villager death gives exactly one custom book.
         int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
         ItemStack reward=book(chosen,lvl);
         e.getDrops().add(reward);
