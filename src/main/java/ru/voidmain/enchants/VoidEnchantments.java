@@ -30,6 +30,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
+    private static final String CATALOG_TITLE = "§0✦ §5VoidMain §8| §dЗачарования";
+    private static final String LEVEL_TITLE = "§0✦ §5VoidMain §8| §dВыбор уровня";
 
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
     private final List<Spec> specs = List.of(
@@ -330,7 +332,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         return List.of();
     }
     private void openCatalog(Player p,int page) {
-        Inventory inv=Bukkit.createInventory(null,54,"§0✦ §5VoidMain §8| §dЗачарования");
+        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
         int start=page*45;
         for(int i=0;i<45 && start+i<specs.size();i++) {
             Spec s=specs.get(start+i);
@@ -339,16 +341,38 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             m.setDisplayName(rarityColor(tier)+s.name());
             m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
-                "§7Тип: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),"§8Нажми, чтобы получить книгу"));
+                "§7Уровни: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),
+                "",s.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
             m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
             icon.setItemMeta(m); inv.setItem(i,icon);
         }
-        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta(); cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
+        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
+        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
+        p.openInventory(inv);
+    }
+    private void openLevelMenu(Player p,Spec s) {
+        Inventory inv=Bukkit.createInventory(null,27,LEVEL_TITLE);
+        int tier=rarityTier(s);
+        for(int lvl=1;lvl<=s.max();lvl++) {
+            ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
+            meta.setDisplayName(rarityColor(tier)+s.name()+" §7"+roman(lvl));
+            meta.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+                "§7Редкость: "+rarityColor(tier)+rarityName(tier),
+                "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
+            meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
+            meta.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,lvl);
+            icon.setItemMeta(meta); inv.setItem(10+lvl,icon);
+        }
+        ItemStack back=new ItemStack(Material.ARROW); ItemMeta bm=back.getItemMeta();
+        bm.setDisplayName("§eНазад к зачарованиям"); back.setItemMeta(bm); inv.setItem(18,back);
+        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
+        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(26,close);
         p.openInventory(inv);
     }
     @EventHandler public void onCatalog(InventoryClickEvent e) {
         if(!(e.getWhoClicked() instanceof Player p)) return;
-        if(e.getView().getTitle().equals(ADMIN_TITLE)) {
+        String title=e.getView().getTitle();
+        if(title.equals(ADMIN_TITLE)) {
             e.setCancelled(true);
             if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
             ItemStack clicked=e.getCurrentItem();
@@ -369,10 +393,35 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             }
             openAdmin(p); return;
         }
-        if(!e.getView().getTitle().contains("VoidMain")) return;
+        if(title.equals(LEVEL_TITLE)) {
+            e.setCancelled(true);
+            if(e.getRawSlot()<0 || e.getRawSlot()>=27) return;
+            ItemStack clicked=e.getCurrentItem();
+            if(clicked==null || clicked.getType()==Material.AIR) return;
+            if(e.getRawSlot()==26) { p.closeInventory(); return; }
+            if(e.getRawSlot()==18) { openCatalog(p,0); return; }
+            Spec selected=findSpec(id(clicked));
+            if(selected==null || !selected.leveled()) return;
+            int lvl=level(clicked);
+            if(lvl<1 || lvl>selected.max()) return;
+            giveBook(p,selected,lvl);
+            p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.4f);
+            p.sendMessage(gradient("✦ Получена книга: "+selected.name()+" "+roman(lvl)));
+            p.closeInventory(); return;
+        }
+        if(!title.equals(CATALOG_TITLE)) return;
         e.setCancelled(true);
-        ItemStack clicked=e.getCurrentItem(); String key=id(clicked); if(key==null) { if(clicked!=null && clicked.getType()==Material.BARRIER)p.closeInventory(); return; }
-        Spec s=spec(key); if(s!=null) { p.getInventory().addItem(book(s,1)).values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it)); p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.5f); }
+        if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
+        ItemStack clicked=e.getCurrentItem();
+        if(clicked==null || clicked.getType()==Material.AIR) return;
+        if(e.getRawSlot()==49 && clicked.getType()==Material.BARRIER) { p.closeInventory(); return; }
+        Spec selected=findSpec(id(clicked));
+        if(selected==null) return;
+        if(selected.leveled()) { openLevelMenu(p,selected); return; }
+        giveBook(p,selected,1);
+        p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.5f);
+        p.sendMessage(gradient("✦ Получена книга: "+selected.name()));
+        p.closeInventory();
     }
 
     private String gradient(String input) {
@@ -451,27 +500,32 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         int tier=roll<5?1:roll<35?2:roll<235?3:roll<1735?4:5;
         List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==tier && isEnabled(x.key())).toList();
         if(pool.isEmpty()) pool=specs.stream().filter(x->isEnabled(x.key())).toList();
-        if(pool.isEmpty()) return specs.get(0);
+        if(pool.isEmpty()) return null;
         return pool.get(new Random().nextInt(pool.size()));
     }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
         if(Math.random()>0.20) return;
         Spec chosen=weightedSpec();
+        if(chosen==null) return;
+        // Higher enchantment levels cost proportionally more; level I is always the cheapest.
         int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
-        org.bukkit.inventory.MerchantRecipe recipe=new org.bukkit.inventory.MerchantRecipe(book(chosen,lvl),3);
-        recipe.addIngredient(new ItemStack(Material.EMERALD,8+new Random().nextInt(17)));
+        int emeraldPrice=Math.min(64,8+(lvl-1)*8+new Random().nextInt(5));
+        org.bukkit.inventory.MerchantRecipe recipe=new org.bukkit.inventory.MerchantRecipe(book(chosen,lvl),12);
+        recipe.addIngredient(new ItemStack(Material.EMERALD,emeraldPrice));
         e.setRecipe(recipe);
     }
-    @EventHandler public void villagerDeath(org.bukkit.event.entity.EntityDeathEvent e) {
+    @EventHandler(priority=EventPriority.HIGH) public void villagerDeath(org.bukkit.event.entity.EntityDeathEvent e) {
         if(!(e.getEntity() instanceof Villager)) return;
         Spec chosen=weightedSpec();
-        double chance=dropChance(chosen)/100.0;
-        if(Math.random()<chance) {
-            int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
-            e.getDrops().add(book(chosen,lvl));
-            getConfig().set("drop-count."+chosen.key(),getConfig().getInt("drop-count."+chosen.key(),0)+1);
-            saveConfig();
-        }
+        if(chosen==null) return;
+        double chance=Math.max(0.0,Math.min(100.0,dropChance(chosen)))/100.0;
+        if(Math.random()>=chance) return;
+        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        ItemStack reward=book(chosen,lvl);
+        e.getDrops().add(reward);
+        getConfig().set("drop-count."+chosen.key(),getConfig().getInt("drop-count."+chosen.key(),0)+1);
+        saveConfig();
+        getLogger().info("Villager dropped custom enchantment book: "+chosen.key()+" level "+lvl);
     }
 
     @EventHandler public void onMine(BlockBreakEvent e) {
