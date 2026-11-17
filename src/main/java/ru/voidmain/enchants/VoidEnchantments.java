@@ -29,7 +29,10 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
     private final Map<UUID, Integer> radarTasks = new HashMap<>();
     private final Map<String, Integer> maceHitCounters = new HashMap<>();
-    private final Map<UUID, Float> sneakSpeeds = new HashMap<>();
+    private final Map<UUID, Double> sneakSpeeds = new HashMap<>();
+    private final Map<UUID, Long> heartShieldCooldown = new HashMap<>(), doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
+    private final Map<UUID, Location> shadowPositions = new HashMap<>();
+    private final Set<Location> lavaBlocks = new HashSet<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
@@ -64,7 +67,15 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("phantomblade","Призрачный клинок","После удара становишься невидимым на 5 секунд",Material.IRON_SWORD,1,false),
         new Spec("radar","Радар","Отмечает игроков и мобов в радиусе 20 блоков визуальными метками",Material.COMPASS,1,false),
         new Spec("aerodynamics","Аэродинамика","Убирает урон от столкновения с блоками при полёте",Material.ELYTRA,1,false),
-        new Spec("spear_dash","Неутомимый рывок","Рывок копьём не расходует голод",Material.TRIDENT,1,false)
+        new Spec("spear_dash","Рыцарь","Рывок копьём не расходует голод",Material.TRIDENT,1,false),
+        new Spec("heartshield","Сердечный щит","При здоровье ниже 30%: Скорость III и Регенерация II на 3 секунды; перезарядка 30 секунд",Material.SHIELD,1,false),
+        new Spec("shadow","Тень","Если стоять в приседе 5 секунд — невидимость до движения",Material.BLACK_DYE,1,false),
+        new Spec("doublejump","Двойной прыжок","Второй прыжок в воздухе; перезарядка 40 секунд",Material.RABBIT_FOOT,1,false),
+        new Spec("taran","Таран","Увеличивает рывок копья: I +1, II +2, III +3 блока",Material.TRIDENT,3,true),
+        new Spec("hook","Крюк","ПКМ притягивает врага в радиусе 5 блоков и отравляет на 5 секунд",Material.LEAD,1,false),
+        new Spec("armorbreaker","Сокрушитель брони","Игнорирует часть брони: I 10%, II 15%, III 25%",Material.NETHERITE_SWORD,3,true),
+        new Spec("bounce","Отскок","ПКМ с булавой подбрасывает вверх примерно на 25 блоков",Material.MACE,1,false),
+        new Spec("waterwalker","Водоход","Создаёт синий лёд под ногами на 3 секунды",Material.BLUE_ICE,1,false)
     );
     private final Set<String> singleTier = new HashSet<>();
 
@@ -113,7 +124,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     private int rarityTier(Spec s) { return switch(s.key()) {
         case "thunder" -> 1;
-        case "blackhole","spear_dash" -> 1;
+        case "blackhole","spear_dash","heartshield" -> 1;
+        case "shadow","hook" -> 2;
+        case "taran","armorbreaker","doublejump" -> 3;
+        case "bounce" -> 5;
+        case "waterwalker" -> 4;
         case "phantomblade","aerodynamics" -> 3;
         case "radar" -> 4;
         case "wings","execution" -> 1;
@@ -130,14 +145,17 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }; }
     private String appliesTo(Spec s) { return switch(s.key()) {
         case "magnet","drill","autosmelt","veinminer","haste","experience" -> "Кирка";
-        case "vampirism","frost","venom","execution" -> "Меч";
-        case "thunder","blackhole" -> "Булава";
+        case "vampirism","frost","venom","execution","armorbreaker" -> "Меч";
+        case "thunder","blackhole","bounce" -> "Булава";
         case "phantomblade" -> "Меч";
         case "radar" -> "Шлем";
         case "aerodynamics" -> "Элитры";
-        case "spear_dash" -> "Копьё"; case "dragonbreath" -> "Нагрудник";
-        case "sneak","diver" -> "Поножи"; case "immunity" -> "Любая броня";
-        case "softsteps","lavawalker" -> "Ботинки"; case "owl","wisdom" -> "Шлем";
+        case "spear_dash","taran","hook" -> "Копьё";
+        case "armorbreaker" -> "Меч";
+        case "heartshield","dragonbreath" -> "Нагрудник";
+        case "shadow","sneak","diver" -> "Поножи";
+        case "doublejump","waterwalker","softsteps","lavawalker" -> "Ботинки";
+        case "immunity" -> "Любая броня"; case "owl","wisdom" -> "Шлем";
         case "sniper" -> "Лук или арбалет"; case "wings","hover" -> "Элитры";
         default -> "Неизвестно";
     }; }
@@ -507,16 +525,21 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private boolean supports(String key, Material type) {
         return switch(key) {
             case "magnet","drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
-            case "vampirism","frost","venom","execution","phantomblade" -> type.name().endsWith("_SWORD");
-            case "thunder","blackhole" -> type==Material.MACE;
+            case "vampirism","frost","venom","execution","phantomblade","armorbreaker" -> type.name().endsWith("_SWORD");
+            case "thunder","blackhole","bounce" -> type==Material.MACE;
             case "dragonbreath" -> type.name().endsWith("_CHESTPLATE");
-            case "sneak","diver" -> type.name().endsWith("_LEGGINGS");
+            case "sneak","diver","shadow" -> type.name().endsWith("_LEGGINGS");
             case "immunity" -> type.name().endsWith("_HELMET") || type.name().endsWith("_CHESTPLATE") || type.name().endsWith("_LEGGINGS") || type.name().endsWith("_BOOTS");
-            case "softsteps","lavawalker" -> type.name().endsWith("_BOOTS");
+            case "softsteps","lavawalker","doublejump","waterwalker" -> type.name().endsWith("_BOOTS");
             case "owl","wisdom","radar" -> type.name().endsWith("_HELMET");
             case "sniper" -> type==Material.BOW || type==Material.CROSSBOW;
             case "wings","hover","aerodynamics" -> type==Material.ELYTRA;
-            case "spear_dash" -> type.name().equals("SPEAR") || type==Material.TRIDENT;
+            case "spear_dash","taran","hook" -> type.name().equals("SPEAR") || type==Material.TRIDENT;
+            case "armorbreaker" -> type.name().endsWith("_SWORD");
+            case "heartshield" -> type.name().endsWith("_CHESTPLATE");
+            case "shadow" -> type.name().endsWith("_LEGGINGS");
+            case "doublejump","waterwalker" -> type.name().endsWith("_BOOTS");
+            case "bounce" -> type==Material.MACE;
             default -> false;
         };
     }
