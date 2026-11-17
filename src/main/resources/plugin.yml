@@ -2,6 +2,7 @@ name: VoidEnchantments
 version: 1.0.0
 main: ru.voidmain.enchants.VoidEnchantments
 api-version: '1.21'
+depend: [packetevents]
 author: VoidMain
 commands:
   voidenchants:
