@@ -151,7 +151,6 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "radar" -> "Шлем";
         case "aerodynamics" -> "Элитры";
         case "spear_dash","taran","hook" -> "Копьё";
-        case "armorbreaker" -> "Меч";
         case "heartshield","dragonbreath" -> "Нагрудник";
         case "shadow","sneak","diver" -> "Поножи";
         case "doublejump","waterwalker","softsteps","lavawalker" -> "Ботинки";
@@ -535,11 +534,6 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             case "sniper" -> type==Material.BOW || type==Material.CROSSBOW;
             case "wings","hover","aerodynamics" -> type==Material.ELYTRA;
             case "spear_dash","taran","hook" -> type.name().equals("SPEAR") || type==Material.TRIDENT;
-            case "armorbreaker" -> type.name().endsWith("_SWORD");
-            case "heartshield" -> type.name().endsWith("_CHESTPLATE");
-            case "shadow" -> type.name().endsWith("_LEGGINGS");
-            case "doublejump","waterwalker" -> type.name().endsWith("_BOOTS");
-            case "bounce" -> type==Material.MACE;
             default -> false;
         };
     }
@@ -818,43 +812,3 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         e.setCancelled(true); long now=System.currentTimeMillis();
         if(now<doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L))return;
         doubleJumpCooldown.put(p.getUniqueId(),now+40000L); p.setAllowFlight(false);
-        Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);
-        p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),18,0.35,0.15,0.35,0.08);
-        p.playSound(p.getLocation(),Sound.ENTITY_PHANTOM_FLAP,0.8f,1.4f);
-    }
-    @EventHandler public void preventLavaPathBreak(BlockBreakEvent e) {
-        if(lavaBlocks.contains(e.getBlock().getLocation())){e.setCancelled(true);e.setDropItems(false);}
-    }
-    @EventHandler public void onInteract(PlayerInteractEvent e) {
-        if(e.getHand()!=EquipmentSlot.HAND)return;
-        Player p=e.getPlayer();ItemStack item=e.getItem();if(item==null)return;
-        boolean right=e.getAction()==org.bukkit.event.block.Action.RIGHT_CLICK_AIR||e.getAction()==org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;if(!right)return;
-        if(item.getType()==Material.MACE&&hasEnchant(item,"bounce")){Vector v=p.getVelocity();v.setY(2.2);p.setVelocity(v);p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),30,0.5,0.2,0.5,0.1);e.setCancelled(true);return;}
-        if((item.getType().name().equals("SPEAR")||item.getType()==Material.TRIDENT)&&hasEnchant(item,"hook")){
-            var hit=p.getWorld().rayTraceEntities(p.getEyeLocation(),p.getEyeLocation().getDirection(),5.0,0.8,x->x instanceof LivingEntity&&x!=p);
-            if(hit!=null&&hit.getHitEntity() instanceof LivingEntity target&&p.hasLineOfSight(target)){
-                Vector pull=p.getLocation().toVector().subtract(target.getLocation().toVector()).normalize().multiply(1.05);pull.setY(Math.max(0.18,pull.getY()+0.15));target.setVelocity(pull);
-                target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0,true,true));}
-            e.setCancelled(true);return;
-        }
-        if((item.getType().name().equals("SPEAR")||item.getType()==Material.TRIDENT)&&hasEnchant(item,"taran")){
-            int lvl=enchantLevel(item,"taran");Bukkit.getScheduler().runTaskLater(this,()->p.setVelocity(p.getVelocity().add(p.getLocation().getDirection().normalize().multiply(0.12*lvl))),1L);
-        }
-    }
-
-    @EventHandler public void onConsume(PlayerItemConsumeEvent e) {
-        Player p=e.getPlayer(); if(has(p,"wisdom")) p.giveExp(1);
-    }
-    @EventHandler public void onExp(PlayerExpChangeEvent e) {
-        Player p=e.getPlayer(); int lv=equippedLevel(p,"experience"); if(lv>0)e.setAmount(e.getAmount()*(1+lv));
-        if(has(p,"wisdom"))e.setAmount(e.getAmount()*2);
-    }
-    @EventHandler public void onQuit(PlayerQuitEvent e) {
-        UUID uid=e.getPlayer().getUniqueId();
-        hitCounters.remove(uid);
-        maceHitCounters.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
-        sneakSpeeds.remove(uid);
-        Integer task=radarTasks.remove(uid);
-        if(task!=null) Bukkit.getScheduler().cancelTask(task);
-    }
-}
