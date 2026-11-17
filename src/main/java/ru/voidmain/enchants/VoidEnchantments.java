@@ -806,9 +806,13 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
     }
 
-    @EventHandler public void onDoubleJump(PlayerToggleFlightEvent e) {
-        Player p=e.getPlayer();
-        if(!has(p,"doublejump") || p.getGameMode()==GameMode.CREATIVE || p.getGameMode()==GameMode.SPECTATOR)return;
-        e.setCancelled(true); long now=System.currentTimeMillis();
-        if(now<doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L))return;
-        doubleJumpCooldown.put(p.getUniqueId(),now+40000L); p.setAllowFlight(false);
+    @EventHandler public void onQuit(PlayerQuitEvent e) {
+        UUID uid=e.getPlayer().getUniqueId();
+        hitCounters.remove(uid);
+        maceHitCounters.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
+        sneakSpeeds.remove(uid);
+        heartShieldCooldown.remove(uid); doubleJumpCooldown.remove(uid);
+        shadowSince.remove(uid); shadowPositions.remove(uid);
+        Integer task=radarTasks.remove(uid); if(task!=null) Bukkit.getScheduler().cancelTask(task);
+    }
+}
