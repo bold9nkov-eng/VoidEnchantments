@@ -28,6 +28,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
+    private final Map<String, Integer> villagerBookDrops = new HashMap<>();
+    private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
 
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
     private final List<Spec> specs = List.of(
@@ -63,6 +65,9 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         for (Spec s : specs) if (!s.leveled()) singleTier.add(s.key());
         getServer().getPluginManager().registerEvents(this,this);
         Objects.requireNonNull(getCommand("voidenchants")).setExecutor(this);
+        Objects.requireNonNull(getCommand("voidenchants")).setTabCompleter(this);
+        getConfig().options().copyDefaults(true);
+        saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
     }
 
@@ -74,7 +79,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         var pdc=item.getItemMeta().getPersistentDataContainer();
         String legacy=pdc.get(enchantKey,PersistentDataType.STRING);
         if(legacy!=null) keys.add(legacy);
-        for(Spec spec:specs) if(pdc.has(itemEnchantKey(spec.key()),PersistentDataType.INTEGER)) keys.add(spec.key());
+        for(Spec spec:specs) if(pdc.has(itemEnchantKey(spec.key()),PersistentDataType.INTEGER) && isEnabled(spec.key())) keys.add(spec.key());
         return keys;
     }
     private String id(ItemStack item) {
@@ -144,18 +149,185 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         return 0;
     }
 
-    @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args) {
-        if(args.length>0 && args[0].equalsIgnoreCase("give")) {
-            if(!sender.hasPermission("voidenchants.admin")) { sender.sendMessage("§cНет прав."); return true; }
-            if(args.length<3) { sender.sendMessage("§c/ve give <игрок> <key> [level]"); return true; }
-            Player target=Bukkit.getPlayerExact(args[1]); Spec s=spec(args[2]);
-            if(target==null || s==null) { sender.sendMessage("§cИгрок или зачарование не найдено."); return true; }
-            int lvl=1; if(s.leveled() && args.length>3) try{lvl=Math.max(1,Math.min(s.max(),Integer.parseInt(args[3])));}catch(Exception ignored){}
-            target.getInventory().addItem(book(s,lvl)).values().forEach(it->target.getWorld().dropItemNaturally(target.getLocation(),it));
-            sender.sendMessage(gradient("Выдано: "+s.name()+" "+roman(lvl))); return true;
+    private boolean isEnabled(String key) { return !getConfig().getStringList("disabled-enchants").contains(key); }
+    private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.5; case 4 -> 1.5; default -> 4.0; }; }
+    private double dropChance(Spec s) { return getConfig().getDouble("drop-chance."+s.key(), defaultDropChance(s)); }
+    private void sendHelp(CommandSender sender, boolean admin) {
+        sender.sendMessage("§5§lVoidEnchantments §8— §fкоманды");
+        sender.sendMessage("§d/enchants §7— открыть каталог");
+        sender.sendMessage("§d/enchants list §7— список чар");
+        sender.sendMessage("§d/enchants info <чар> §7— описание");
+        sender.sendMessage("§d/enchants apply §7— как применить книгу");
+        if(admin) {
+            sender.sendMessage("§c/ve give <игрок> <чар> [уровень]");
+            sender.sendMessage("§c/ve giveall <чар> [уровень>]");
+            sender.sendMessage("§c/ve remove <игрок> <чар> §8| §c/ve book <чар> [уровень]");
+            sender.sendMessage("§c/ve list §8| §c/ve info <чар> §8| §c/ve debug <игрок>");
+            sender.sendMessage("§c/ve drops §8| §c/ve admin §8| §c/ve reload §8| §c/ve help");
         }
-        if(sender instanceof Player p) openCatalog(p,0); else sender.sendMessage("Команда доступна игроку.");
+    }
+    private Spec findSpec(String input) {
+        if(input==null) return null;
+        Spec byKey=spec(input);
+        if(byKey!=null) return byKey;
+        return specs.stream().filter(x->x.name().equalsIgnoreCase(input)).findFirst().orElse(null);
+    }
+    private int parseLevel(Spec s,String raw) {
+        if(!s.leveled()) return 1;
+        try { return Math.max(1,Math.min(s.max(),Integer.parseInt(raw))); }
+        catch(Exception ignored) { return 1; }
+    }
+    private void giveBook(Player p,Spec s,int lvl) {
+        Map<Integer,ItemStack> rest=p.getInventory().addItem(book(s,lvl));
+        rest.values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it));
+    }
+    private void sendSpecInfo(CommandSender sender,Spec s) {
+        int tier=rarityTier(s);
+        sender.sendMessage("§5✦ §l"+s.name()+" §8("+s.key()+")");
+        sender.sendMessage("§7Описание: §f"+s.lore());
+        sender.sendMessage("§7Предмет: §f"+appliesTo(s));
+        sender.sendMessage("§7Редкость: "+rarityColor(tier)+rarityName(tier));
+        sender.sendMessage("§7Уровни: §f"+(s.leveled()?"I–"+roman(s.max()):"без уровней"));
+        sender.sendMessage("§7Статус: "+(isEnabled(s.key())?"§aвключено":"§cотключено"));
+    }
+    private boolean removeEnchant(Player p,Spec s) {
+        boolean changed=false;
+        for(ItemStack item:p.getInventory().getContents()) changed|=removeEnchantFromItem(item,s);
+        for(ItemStack item:p.getInventory().getArmorContents()) changed|=removeEnchantFromItem(item,s);
+        changed|=removeEnchantFromItem(p.getInventory().getItemInOffHand(),s);
+        p.updateInventory();
+        return changed;
+    }
+    private boolean removeEnchantFromItem(ItemStack item,Spec s) {
+        if(item==null || !item.hasItemMeta() || !hasEnchant(item,s.key())) return false;
+        ItemMeta meta=item.getItemMeta();
+        meta.getPersistentDataContainer().remove(itemEnchantKey(s.key()));
+        if(s.key().equals(meta.getPersistentDataContainer().get(enchantKey,PersistentDataType.STRING))) {
+            meta.getPersistentDataContainer().remove(enchantKey);
+            meta.getPersistentDataContainer().remove(levelKey);
+        }
+        List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
+        lore.removeIf(line->ChatColor.stripColor(line).startsWith(s.name()));
+        meta.setLore(lore.isEmpty()?null:lore);
+        item.setItemMeta(meta);
         return true;
+    }
+    private void openAdmin(Player p) {
+        Inventory inv=Bukkit.createInventory(null,54,ADMIN_TITLE);
+        for(int i=0;i<specs.size() && i<45;i++) {
+            Spec s=specs.get(i); int tier=rarityTier(s);
+            ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
+            m.setDisplayName(rarityColor(tier)+s.name());
+            m.setLore(List.of("§7"+s.lore(),"§7Предмет: §f"+appliesTo(s),
+                "§7Редкость: "+rarityColor(tier)+rarityName(tier),
+                "§7Эффект: "+(isEnabled(s.key())?"§aВКЛЮЧЁН":"§cВЫКЛЮЧЕН"),
+                "§7Шанс с жителя: §f"+String.format(Locale.US,"%.3f",dropChance(s))+"%",
+                "","§eЛКМ §7— вкл./выкл.",
+                "§eShift + ЛКМ §7— повысить шанс на 0,05%",
+                "§eShift + ПКМ §7— понизить шанс на 0,05%"));
+            m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
+            icon.setItemMeta(m); inv.setItem(i,icon);
+        }
+        ItemStack book=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta bm=book.getItemMeta();
+        bm.setDisplayName("§dЖурнал выпадения книг");
+        bm.setLore(List.of("§7Используй §f/ve drops","§7Статистика выпадений с жителей"));
+        book.setItemMeta(bm); inv.setItem(49,book);
+        ItemStack barrier=new ItemStack(Material.BARRIER); ItemMeta cm=barrier.getItemMeta(); cm.setDisplayName("§cЗакрыть"); barrier.setItemMeta(cm); inv.setItem(53,barrier);
+        p.openInventory(inv);
+    }
+    @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args) {
+        String sub=args.length==0?"":args[0].toLowerCase(Locale.ROOT);
+        boolean admin=sender.hasPermission("voidenchants.admin");
+        if(sub.isEmpty()) {
+            if(sender instanceof Player p) openCatalog(p,0); else sendHelp(sender,admin);
+            return true;
+        }
+        if(sub.equals("help")) { sendHelp(sender,admin); return true; }
+        if(sub.equals("list")) {
+            sender.sendMessage("§5§lVoidMain §8| §dКастомные зачарования:");
+            for(Spec s:specs) sender.sendMessage(rarityColor(rarityTier(s))+"• "+s.name()+" §8— §7"+s.key()+" §8| §f"+appliesTo(s));
+            return true;
+        }
+        if(sub.equals("info") || sub.equals("инфо")) {
+            if(args.length<2) { sender.sendMessage("§cИспользование: /enchants info <чар>"); return true; }
+            Spec s=findSpec(args[1]); if(s==null) sender.sendMessage("§cТакое зачарование не найдено."); else sendSpecInfo(sender,s);
+            return true;
+        }
+        if(sub.equals("apply")) {
+            sender.sendMessage("§d✦ §fКак применить кастомное зачарование:");
+            sender.sendMessage("§71. §fВозьми книгу в левую или правую ячейку наковальни.");
+            sender.sendMessage("§72. §fПоложи подходящий предмет во вторую ячейку.");
+            sender.sendMessage("§73. §fЗабери результат за уровни опыта.");
+            sender.sendMessage("§8Крылья несовместимы с другими чарами на элитрах.");
+            return true;
+        }
+        if(!admin) { sender.sendMessage("§cНет прав. Админ-команды доступны только операторам."); return true; }
+        switch(sub) {
+            case "give" -> {
+                if(args.length<3) { sender.sendMessage("§c/ve give <игрок> <чар> [уровень]"); return true; }
+                Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
+                if(target==null || s==null) { sender.sendMessage("§cИгрок или зачарование не найдено."); return true; }
+                int lvl=args.length>3?parseLevel(s,args[3]):1; giveBook(target,s,lvl);
+                sender.sendMessage(gradient("Выдано игроку "+target.getName()+": "+s.name()+" "+roman(lvl)));
+            }
+            case "giveall" -> {
+                if(args.length<2) { sender.sendMessage("§c/ve giveall <чар> [уровень]"); return true; }
+                Spec s=findSpec(args[1]); if(s==null) { sender.sendMessage("§cЗачарование не найдено."); return true; }
+                int lvl=args.length>2?parseLevel(s,args[2]):1;
+                for(Player target:Bukkit.getOnlinePlayers()) giveBook(target,s,lvl);
+                sender.sendMessage("§aКнига выдана всем онлайн: §f"+Bukkit.getOnlinePlayers().size()+" §7игрокам.");
+            }
+            case "book" -> {
+                if(!(sender instanceof Player p)) { sender.sendMessage("§cКоманда только для игрока."); return true; }
+                if(args.length<2) { sender.sendMessage("§c/ve book <чар> [уровень]"); return true; }
+                Spec s=findSpec(args[1]); if(s==null) { sender.sendMessage("§cЗачарование не найдено."); return true; }
+                giveBook(p,s,args.length>2?parseLevel(s,args[2]):1); sender.sendMessage("§aКнига выдана.");
+            }
+            case "remove" -> {
+                if(args.length<3) { sender.sendMessage("§c/ve remove <игрок> <чар>"); return true; }
+                Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
+                if(target==null || s==null) { sender.sendMessage("§cИгрок или зачарование не найдено."); return true; }
+                sender.sendMessage(removeEnchant(target,s)?"§aЗачарование удалено со всех предметов игрока.":"§eУ игрока такого зачарования нет.");
+            }
+            case "reload" -> { reloadConfig(); sender.sendMessage("§aКонфигурация VoidEnchantments перезагружена."); }
+            case "debug" -> {
+                if(args.length<2) { sender.sendMessage("§c/ve debug <игрок>"); return true; }
+                Player target=Bukkit.getPlayerExact(args[1]); if(target==null) { sender.sendMessage("§cИгрок не найден или не в сети."); return true; }
+                sender.sendMessage("§5§lVoidEnchantments §8| §fПредметы "+target.getName());
+                ItemStack[] all=target.getInventory().getContents();
+                for(int i=0;i<all.length;i++) if(all[i]!=null && !enchantKeys(all[i]).isEmpty())
+                    sender.sendMessage("§7Слот "+i+" §8("+all[i].getType()+"): §f"+String.join(", ",enchantKeys(all[i])));
+                for(ItemStack it:target.getInventory().getArmorContents()) if(it!=null && !enchantKeys(it).isEmpty())
+                    sender.sendMessage("§7Броня §8("+it.getType()+"): §f"+String.join(", ",enchantKeys(it)));
+            }
+            case "drops" -> {
+                sender.sendMessage("§5§lVoidMain §8| §dВыпадение книг с жителей");
+                for(Spec s:specs) {
+                    int count=getConfig().getInt("drop-count."+s.key(),0);
+                    sender.sendMessage(rarityColor(rarityTier(s))+s.name()+" §8— §f"+count+" §7шт. §8| §7шанс "+String.format(Locale.US,"%.3f",dropChance(s))+"%");
+                }
+            }
+            case "admin" -> {
+                if(sender instanceof Player p) openAdmin(p); else sender.sendMessage("§cАдмин-панель доступна только в игре.");
+            }
+            default -> sender.sendMessage("§cНеизвестная команда. Используй /ve help");
+        }
+        return true;
+    }
+    @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args) {
+        boolean admin=sender.hasPermission("voidenchants.admin");
+        List<String> roots=new ArrayList<>(List.of("help","list","info","apply"));
+        if(admin) roots.addAll(List.of("give","giveall","remove","book","reload","debug","drops","admin"));
+        if(args.length==1) return roots.stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
+        String sub=args[0].toLowerCase(Locale.ROOT);
+        if(!admin && !List.of("info","apply","list","help").contains(sub)) return List.of();
+        if(args.length==2 && List.of("give","remove","debug").contains(sub) && admin)
+            return Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(x->x.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
+        if((args.length==2 && List.of("info","giveall","book").contains(sub)) || (args.length==3 && List.of("give","remove").contains(sub))) {
+            return specs.stream().map(Spec::key).filter(x->x.startsWith(args[args.length-1].toLowerCase(Locale.ROOT))).toList();
+        }
+        if((args.length==4 && sub.equals("give")) || (args.length==3 && List.of("giveall","book").contains(sub))) return List.of("1","2","3","4");
+        return List.of();
     }
     private void openCatalog(Player p,int page) {
         Inventory inv=Bukkit.createInventory(null,54,"§0✦ §5VoidMain §8| §dЗачарования");
@@ -175,7 +347,28 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         p.openInventory(inv);
     }
     @EventHandler public void onCatalog(InventoryClickEvent e) {
-        if(!e.getView().getTitle().contains("VoidMain") || !(e.getWhoClicked() instanceof Player p)) return;
+        if(!(e.getWhoClicked() instanceof Player p)) return;
+        if(e.getView().getTitle().equals(ADMIN_TITLE)) {
+            e.setCancelled(true);
+            ItemStack clicked=e.getCurrentItem();
+            if(clicked==null || clicked.getType()==Material.AIR) return;
+            if(e.getRawSlot()==53) { p.closeInventory(); return; }
+            String key=id(clicked); Spec selected=findSpec(key);
+            if(selected==null) return;
+            if(e.getClick()==ClickType.SHIFT_LEFT || e.getClick()==ClickType.SHIFT_RIGHT) {
+                double delta=e.getClick()==ClickType.SHIFT_LEFT?0.05:-0.05;
+                double next=Math.max(0,Math.min(100,dropChance(selected)+delta));
+                getConfig().set("drop-chance."+selected.key(),next); saveConfig();
+                p.sendMessage("§dШанс "+selected.name()+": §f"+String.format(Locale.US,"%.3f",next)+"%");
+            } else {
+                List<String> disabled=new ArrayList<>(getConfig().getStringList("disabled-enchants"));
+                if(disabled.contains(selected.key())) disabled.remove(selected.key()); else disabled.add(selected.key());
+                getConfig().set("disabled-enchants",disabled); saveConfig();
+                p.sendMessage("§d"+selected.name()+": "+(isEnabled(selected.key())?"§aвключено":"§cотключено"));
+            }
+            openAdmin(p); return;
+        }
+        if(!e.getView().getTitle().contains("VoidMain")) return;
         e.setCancelled(true);
         ItemStack clicked=e.getCurrentItem(); String key=id(clicked); if(key==null) { if(clicked!=null && clicked.getType()==Material.BARRIER)p.closeInventory(); return; }
         Spec s=spec(key); if(s!=null) { p.getInventory().addItem(book(s,1)).values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it)); p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.5f); }
@@ -255,7 +448,9 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private Spec weightedSpec() {
         int roll=new Random().nextInt(10000);
         int tier=roll<5?1:roll<35?2:roll<235?3:roll<1735?4:5;
-        List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==tier).toList();
+        List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==tier && isEnabled(x.key())).toList();
+        if(pool.isEmpty()) pool=specs.stream().filter(x->isEnabled(x.key())).toList();
+        if(pool.isEmpty()) return specs.get(0);
         return pool.get(new Random().nextInt(pool.size()));
     }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
@@ -269,12 +464,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     @EventHandler public void villagerDeath(org.bukkit.event.entity.EntityDeathEvent e) {
         if(!(e.getEntity() instanceof Villager)) return;
         Spec chosen=weightedSpec();
-        double chance=switch(rarityTier(chosen)) {
-            case 1 -> 0.0005; case 2 -> 0.0015; case 3 -> 0.005; case 4 -> 0.015; default -> 0.04;
-        };
+        double chance=dropChance(chosen)/100.0;
         if(Math.random()<chance) {
             int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
             e.getDrops().add(book(chosen,lvl));
+            getConfig().set("drop-count."+chosen.key(),getConfig().getInt("drop-count."+chosen.key(),0)+1);
+            saveConfig();
         }
     }
 
