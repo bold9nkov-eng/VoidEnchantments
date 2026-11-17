@@ -62,7 +62,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("hover","Парение","Shift позволяет зависать в воздухе",Material.PHANTOM_MEMBRANE,1,false),
         new Spec("blackhole","Чёрная дыра","Каждый второй удар булавой обездвиживает цель на 2 секунды",Material.ENDER_EYE,1,false),
         new Spec("phantomblade","Призрачный клинок","После удара становишься невидимым на 5 секунд",Material.IRON_SWORD,1,false),
-        new Spec("radar","Радар","Обнаруживает игроков и мобов в радиусе 20 блоков",Material.COMPASS,1,false),
+        new Spec("radar","Радар","Отмечает игроков и мобов в радиусе 20 блоков визуальными метками",Material.COMPASS,1,false),
         new Spec("aerodynamics","Аэродинамика","Убирает урон от столкновения с блоками при полёте",Material.ELYTRA,1,false),
         new Spec("spear_dash","Неутомимый рывок","Рывок копьём не расходует голод",Material.TRIDENT,1,false)
     );
@@ -117,7 +117,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "phantomblade","aerodynamics" -> 3;
         case "radar" -> 4;
         case "wings","execution" -> 1;
-        case "drill","vampirism","sniper","windspeed" -> 2;
+        case "drill","vampirism","sniper" -> 2;
         case "veinminer","hover","lavawalker","dragonbreath" -> 3;
         case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
         default -> 5;
@@ -138,7 +138,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "spear_dash" -> "Копьё"; case "dragonbreath" -> "Нагрудник";
         case "sneak","diver" -> "Поножи"; case "immunity" -> "Любая броня";
         case "softsteps","lavawalker" -> "Ботинки"; case "owl","wisdom" -> "Шлем";
-        case "sniper" -> "Лук или арбалет"; case "wings","hover","aerodynamics" -> "Элитры";
+        case "sniper" -> "Лук или арбалет"; case "wings","hover" -> "Элитры";
         default -> "Неизвестно";
     }; }
     private ItemStack book(Spec s,int lvl) {
@@ -629,7 +629,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             if(keys.contains("venom") && hit%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));
             if(keys.contains("thunder") && Math.random()<0.12) {
                 target.getWorld().strikeLightning(target.getLocation());
-                target.damage(8.0, p);
+                target.damage(15.0, p);
             }
             if(keys.contains("blackhole") && weapon.getType()==Material.MACE) {
                 String pair=uid+":"+target.getUniqueId();
