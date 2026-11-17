@@ -21,7 +21,7 @@ import org.bukkit.util.Vector;
 
 import java.util.*;
 
-public final class VoidEnchantments extends JavaPlugin implements Listener, CommandExecutor {
+public final class VoidEnchantments extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
     private NamespacedKey enchantKey;
     private NamespacedKey levelKey;
     private final Set<UUID> drilling = new HashSet<>();
@@ -160,7 +160,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         sender.sendMessage("§d/enchants apply §7— как применить книгу");
         if(admin) {
             sender.sendMessage("§c/ve give <игрок> <чар> [уровень]");
-            sender.sendMessage("§c/ve giveall <чар> [уровень>]");
+            sender.sendMessage("§c/ve giveall <чар> [уровень]");
             sender.sendMessage("§c/ve remove <игрок> <чар> §8| §c/ve book <чар> [уровень]");
             sender.sendMessage("§c/ve list §8| §c/ve info <чар> §8| §c/ve debug <игрок>");
             sender.sendMessage("§c/ve drops §8| §c/ve admin §8| §c/ve reload §8| §c/ve help");
