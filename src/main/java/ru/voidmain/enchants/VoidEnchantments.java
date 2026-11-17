@@ -113,7 +113,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     private int rarityTier(Spec s) { return switch(s.key()) {
         case "thunder" -> 1;
-        case "blackhole","spear_dash" -> 5;
+        case "blackhole","spear_dash" -> 1;
         case "phantomblade","aerodynamics" -> 3;
         case "radar" -> 4;
         case "wings","execution" -> 1;
@@ -384,6 +384,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(26,close);
         p.openInventory(inv);
     }
+    @EventHandler public void onCatalogDrag(InventoryDragEvent e) {
+        String title = e.getView().getTitle();
+        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
+    }
+
     @EventHandler public void onCatalog(InventoryClickEvent e) {
         if(!(e.getWhoClicked() instanceof Player p)) return;
         String title=e.getView().getTitle();
@@ -410,6 +415,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
         if(title.equals(LEVEL_TITLE)) {
             e.setCancelled(true);
+            if (!p.hasPermission("voidenchants.admin")) {
+                p.closeInventory();
+                p.sendMessage("§cПолучать книги кастомных зачарований через меню может только администрация.");
+                return;
+            }
             if(e.getRawSlot()<0 || e.getRawSlot()>=27) return;
             ItemStack clicked=e.getCurrentItem();
             if(clicked==null || clicked.getType()==Material.AIR) return;
@@ -426,6 +436,16 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
         if(!title.equals(CATALOG_TITLE)) return;
         e.setCancelled(true);
+        if (!p.hasPermission("voidenchants.admin")) {
+            if (e.getRawSlot() >= 0 && e.getRawSlot() < 54) {
+                ItemStack preview = e.getCurrentItem();
+                if (preview != null && preview.getType() != Material.AIR) {
+                    Spec info = findSpec(id(preview));
+                    if (info != null) sendSpecInfo(p, info);
+                }
+            }
+            return;
+        }
         if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
         ItemStack clicked=e.getCurrentItem();
         if(clicked==null || clicked.getType()==Material.AIR) return;
@@ -452,7 +472,16 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{if(!viewer.isOnline()||!has(viewer,"radar")){Integer active=radarTasks.remove(id);if(active!=null)Bukkit.getScheduler().cancelTask(active);return;}for(Entity entity:viewer.getNearbyEntities(20,20,20))if(entity instanceof LivingEntity && entity!=viewer)viewer.spawnParticle(Particle.END_ROD,entity.getLocation().add(0,1,0),1,0.12,0.25,0.12,0);},0L,10L);
         radarTasks.put(id,task);
     }
-    @EventHandler public void onExhaustion(org.bukkit.event.entity.EntityExhaustionEvent e) { if(e.getEntity() instanceof Player p && has(p,"spear_dash")) e.setCancelled(true); }
+    @EventHandler(priority=EventPriority.HIGHEST)
+    public void onExhaustion(org.bukkit.event.entity.EntityExhaustionEvent e) {
+        if (!(e.getEntity() instanceof Player p)) return;
+        ItemStack weapon = p.getInventory().getItemInMainHand();
+        if (weapon == null || weapon.getType() == Material.AIR) return;
+        String type = weapon.getType().name();
+        if ((type.equals("SPEAR") || weapon.getType() == Material.TRIDENT) && hasEnchant(weapon, "spear_dash")) {
+            e.setCancelled(true);
+        }
+    }
     private String gradient(String input, int tier) {
         int[][] colors = switch(tier) {
             case 1 -> new int[][]{{255,35,55},{255,105,115},{255,190,195},{255,255,255}};
