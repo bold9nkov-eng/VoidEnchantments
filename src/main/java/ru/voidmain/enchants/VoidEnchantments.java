@@ -806,6 +806,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
     }
 
+    @EventHandler public void onConsume(PlayerItemConsumeEvent e) { Player p=e.getPlayer(); if(has(p,"wisdom"))p.giveExp(1); }
+    @EventHandler public void onExp(PlayerExpChangeEvent e) { Player p=e.getPlayer(); int lv=equippedLevel(p,"experience"); if(lv>0)e.setAmount(e.getAmount()*(1+lv)); if(has(p,"wisdom"))e.setAmount(e.getAmount()*2); }
     @EventHandler public void onQuit(PlayerQuitEvent e) {
         UUID uid=e.getPlayer().getUniqueId();
         hitCounters.remove(uid);
