@@ -701,6 +701,19 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             }
         }
     }
+    @EventHandler(priority=EventPriority.MONITOR, ignoreCancelled=true)
+    public void heartShield(EntityDamageEvent e) {
+        if (!(e.getEntity() instanceof Player p) || !has(p,"heartshield")) return;
+        if (p.getHealth()-e.getFinalDamage()>p.getMaxHealth()*0.30) return;
+        long now=System.currentTimeMillis();
+        if(now<heartShieldCooldown.getOrDefault(p.getUniqueId(),0L)) return;
+        heartShieldCooldown.put(p.getUniqueId(),now+30000L);
+        Bukkit.getScheduler().runTask(this,()->{ if(!p.isOnline()||p.isDead())return;
+            p.addPotionEffect(new PotionEffect(PotionEffectType.SPEED,60,2,true,true));
+            p.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,60,1,true,true));
+            p.getWorld().spawnParticle(Particle.HEART,p.getLocation().add(0,1,0),12,0.5,0.5,0.5,0.05); });
+    }
+
     @EventHandler public void onDamage(EntityDamageEvent e) {
         if(!(e.getEntity() instanceof Player p)) return;
         if(has(p,"immunity") && Math.random()<0.20) for(PotionEffect effect:new ArrayList<>(p.getActivePotionEffects())) if(effect.getType().equals(PotionEffectType.SLOWNESS)||effect.getType().equals(PotionEffectType.WEAKNESS)||effect.getType().equals(PotionEffectType.BLINDNESS)||effect.getType().equals(PotionEffectType.POISON)||effect.getType().equals(PotionEffectType.NAUSEA)) p.removePotionEffect(effect.getType());
