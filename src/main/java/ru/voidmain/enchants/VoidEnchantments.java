@@ -350,6 +350,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(!(e.getWhoClicked() instanceof Player p)) return;
         if(e.getView().getTitle().equals(ADMIN_TITLE)) {
             e.setCancelled(true);
+            if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
             ItemStack clicked=e.getCurrentItem();
             if(clicked==null || clicked.getType()==Material.AIR) return;
             if(e.getRawSlot()==53) { p.closeInventory(); return; }
