@@ -37,6 +37,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Double> sneakSpeeds = new HashMap<>();
     private final Map<UUID, Long> heartShieldCooldown = new HashMap<>(), doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<UUID, Location> shadowPositions = new HashMap<>();
+    private final Map<UUID, Integer> shadowTasks = new HashMap<>();
     private final Set<Location> lavaBlocks = new HashSet<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
@@ -789,13 +790,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 else { Double old=sneakSpeeds.remove(p.getUniqueId()); if(old!=null)attr.setBaseValue(old); }
             }
         }
-        if(has(p,"shadow") && p.isSneaking()) {
-            UUID id=p.getUniqueId(); Location now=p.getLocation(), prev=shadowPositions.get(id);
-            boolean moved=prev==null || prev.getWorld()!=now.getWorld() || prev.distanceSquared(now)>0.0025;
-            if(moved) { shadowSince.put(id,System.currentTimeMillis()); shadowPositions.put(id,now.clone()); }
-            else if(System.currentTimeMillis()-shadowSince.getOrDefault(id,System.currentTimeMillis())>=5000L)
-                p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY,40,0,true,false));
-        } else { shadowSince.remove(p.getUniqueId()); shadowPositions.remove(p.getUniqueId()); }
+
         if(has(p,"doublejump") && System.currentTimeMillis()>=doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L) && !p.isFlying() && !p.isGliding() && !p.isOnGround()) p.setAllowFlight(true);
         else if(!p.isFlying() && !p.isGliding() && p.isOnGround() && p.getGameMode()!=GameMode.CREATIVE && p.getGameMode()!=GameMode.SPECTATOR) p.setAllowFlight(false);
         if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); }
@@ -813,6 +808,26 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             wingsJumping.add(uid);
         }
     }
+    @EventHandler public void onShadowSneak(PlayerToggleSneakEvent e) {
+        Player p=e.getPlayer(); UUID id=p.getUniqueId();
+        Integer old=shadowTasks.remove(id); if(old!=null)Bukkit.getScheduler().cancelTask(old);
+        if(!e.isSneaking() || !has(p,"shadow")) { shadowSince.remove(id); shadowPositions.remove(id); p.removePotionEffect(PotionEffectType.INVISIBILITY); return; }
+        Location[] anchor={p.getLocation().clone()}; long[] stillSince={System.currentTimeMillis()};
+        int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{
+            if(!p.isOnline() || !p.isSneaking() || !has(p,"shadow")) {
+                Integer active=shadowTasks.remove(id); if(active!=null)Bukkit.getScheduler().cancelTask(active);
+                shadowSince.remove(id);shadowPositions.remove(id);p.removePotionEffect(PotionEffectType.INVISIBILITY);return;
+            }
+            Location now=p.getLocation();
+            if(anchor[0].getWorld()!=now.getWorld() || anchor[0].distanceSquared(now)>0.0025) {
+                anchor[0]=now.clone();stillSince[0]=System.currentTimeMillis();p.removePotionEffect(PotionEffectType.INVISIBILITY);
+            } else if(System.currentTimeMillis()-stillSince[0]>=5000L) {
+                p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY,40,0,true,false));
+            }
+        },0L,5L);
+        shadowTasks.put(id,task);
+    }
+
     @EventHandler public void onDoubleJump(PlayerToggleFlightEvent e) {
         Player p=e.getPlayer();
         if(!has(p,"doublejump") || p.getGameMode()==GameMode.CREATIVE || p.getGameMode()==GameMode.SPECTATOR) return;
@@ -858,6 +873,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         sneakSpeeds.remove(uid);
         heartShieldCooldown.remove(uid); doubleJumpCooldown.remove(uid);
         shadowSince.remove(uid); shadowPositions.remove(uid);
+        Integer shadowTask=shadowTasks.remove(uid); if(shadowTask!=null)Bukkit.getScheduler().cancelTask(shadowTask);
         Integer task=radarTasks.remove(uid); if(task!=null) Bukkit.getScheduler().cancelTask(task);
         radarTargets.remove(uid);
     }
