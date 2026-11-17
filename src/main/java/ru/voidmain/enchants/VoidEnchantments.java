@@ -796,6 +796,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             else if(System.currentTimeMillis()-shadowSince.getOrDefault(id,System.currentTimeMillis())>=5000L)
                 p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY,40,0,true,false));
         } else { shadowSince.remove(p.getUniqueId()); shadowPositions.remove(p.getUniqueId()); }
+        if(has(p,"doublejump") && !p.isFlying() && !p.isGliding() && !p.isOnGround()) p.setAllowFlight(true);
+        else if(!p.isFlying() && !p.isGliding() && p.isOnGround() && p.getGameMode()!=GameMode.CREATIVE && p.getGameMode()!=GameMode.SPECTATOR) p.setAllowFlight(false);
         if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); }
         // Detect one jump per ground-to-air transition; Bukkit has no PlayerJumpEvent.
         UUID uid = p.getUniqueId();
