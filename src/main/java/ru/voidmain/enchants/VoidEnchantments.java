@@ -1,6 +1,10 @@
 package ru.voidmain.enchants;
 
 import org.bukkit.*;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import org.bukkit.block.Block;
 import org.bukkit.command.*;
 import org.bukkit.enchantments.Enchantment;
@@ -28,6 +32,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
     private final Map<UUID, Integer> radarTasks = new HashMap<>();
+    private final Map<UUID, Map<Integer, Entity>> radarTargets = new HashMap<>();
     private final Map<String, Integer> maceHitCounters = new HashMap<>();
     private final Map<UUID, Double> sneakSpeeds = new HashMap<>();
     private final Map<UUID, Long> heartShieldCooldown = new HashMap<>(), doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
@@ -482,11 +487,47 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         else { target.setVelocity(new Vector(0,0,0)); target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,10,true,false)); }
         target.getWorld().spawnParticle(Particle.PORTAL,target.getLocation().add(0,1,0),35,0.5,0.7,0.5,0.15);
     }
+    private byte entityFlags(Entity entity, boolean glowing) {
+        int flags=0;
+        if(entity.isOnFire())flags|=0x01;
+        if(entity instanceof LivingEntity living && living.isInvisible())flags|=0x20;
+        if(entity instanceof Player target){
+            if(target.isSneaking())flags|=0x02;
+            if(target.isSprinting())flags|=0x08;
+            if(target.isSwimming())flags|=0x10;
+            if(target.isGliding())flags|=0x80;
+        }
+        if(glowing)flags|=0x40;
+        return (byte)flags;
+    }
+    private void sendRadarGlow(Player viewer, Entity target, boolean glow) {
+        if(!viewer.isOnline() || !target.isValid())return;
+        byte flags=entityFlags(target,glow);
+        WrapperPlayServerEntityMetadata packet=new WrapperPlayServerEntityMetadata(target.getEntityId(),List.of(new EntityData<>(0,EntityDataTypes.BYTE,flags)));
+        PacketEvents.getAPI().getPlayerManager().sendPacket(viewer,packet);
+    }
     private void updateRadar(Player viewer) {
         UUID id=viewer.getUniqueId();
-        if(!has(viewer,"radar")) {Integer task=radarTasks.remove(id);if(task!=null)Bukkit.getScheduler().cancelTask(task);return;}
+        if(!has(viewer,"radar")) {
+            Integer task=radarTasks.remove(id);if(task!=null)Bukkit.getScheduler().cancelTask(task);
+            Map<Integer,Entity> old=radarTargets.remove(id);if(old!=null)for(Entity entity:old.values())sendRadarGlow(viewer,entity,false);
+            return;
+        }
         if(radarTasks.containsKey(id))return;
-        int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{if(!viewer.isOnline()||!has(viewer,"radar")){Integer active=radarTasks.remove(id);if(active!=null)Bukkit.getScheduler().cancelTask(active);return;}for(Entity entity:viewer.getNearbyEntities(20,20,20))if(entity instanceof LivingEntity && entity!=viewer)viewer.spawnParticle(Particle.END_ROD,entity.getLocation().add(0,1,0),1,0.12,0.25,0.12,0);},0L,10L);
+        int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{
+            if(!viewer.isOnline()||!has(viewer,"radar")){
+                Integer active=radarTasks.remove(id);if(active!=null)Bukkit.getScheduler().cancelTask(active);
+                Map<Integer,Entity> old=radarTargets.remove(id);if(old!=null)for(Entity entity:old.values())sendRadarGlow(viewer,entity,false);
+                return;
+            }
+            Map<Integer,Entity> current=new HashMap<>();
+            for(Entity entity:viewer.getNearbyEntities(20,20,20))if(entity instanceof LivingEntity && entity!=viewer){
+                current.put(entity.getEntityId(),entity);sendRadarGlow(viewer,entity,true);
+            }
+            Map<Integer,Entity> previous=radarTargets.getOrDefault(id,Map.of());
+            for(var entry:previous.entrySet())if(!current.containsKey(entry.getKey()))sendRadarGlow(viewer,entry.getValue(),false);
+            radarTargets.put(id,current);
+        },0L,10L);
         radarTasks.put(id,task);
     }
     @EventHandler(priority=EventPriority.HIGHEST)
@@ -816,5 +857,6 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         heartShieldCooldown.remove(uid); doubleJumpCooldown.remove(uid);
         shadowSince.remove(uid); shadowPositions.remove(uid);
         Integer task=radarTasks.remove(uid); if(task!=null) Bukkit.getScheduler().cancelTask(task);
+        radarTargets.remove(uid);
     }
 }
