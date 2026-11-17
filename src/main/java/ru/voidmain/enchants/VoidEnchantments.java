@@ -647,17 +647,35 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         UUID uid=p.getUniqueId();
         if(e.isGliding() && has(p,"windspeed")) {
             if(windBoostTasks.containsKey(uid)) return;
+            p.getWorld().playSound(p.getLocation(),Sound.ITEM_ELYTRA_FLYING,0.9f,1.35f);
+            p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),18,0.35,0.25,0.35,0.04);
             int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{
                 if(!p.isOnline() || !p.isGliding() || !has(p,"windspeed")) {
                     Integer active=windBoostTasks.remove(uid);
                     if(active!=null) Bukkit.getScheduler().cancelTask(active);
                     return;
                 }
-                Vector v=p.getVelocity();
-                Vector horizontal=new Vector(v.getX(),0,v.getZ()).multiply(1.035);
-                double max=2.5;
-                if(horizontal.length()>max) horizontal.normalize().multiply(max);
-                p.setVelocity(new Vector(horizontal.getX(),v.getY(),horizontal.getZ()));
+
+                // Drive the player forward along their look direction. Merely multiplying
+                // the current velocity is unreliable because vanilla elytra physics damps it.
+                Vector look=p.getLocation().getDirection();
+                Vector forward=new Vector(look.getX(),0,look.getZ());
+                if(forward.lengthSquared()>0.0001) forward.normalize();
+
+                Vector current=p.getVelocity();
+                Vector horizontal=new Vector(current.getX(),0,current.getZ()).multiply(0.985);
+                horizontal.add(forward.multiply(0.12));
+
+                // A deliberately high but controlled cap makes the enchant clearly faster
+                // than normal gliding without letting velocity grow without bounds.
+                double maxSpeed=2.2;
+                if(horizontal.length()>maxSpeed) horizontal.normalize().multiply(maxSpeed);
+                p.setVelocity(new Vector(horizontal.getX(),current.getY(),horizontal.getZ()));
+
+                if(p.getTicksLived()%4==0) {
+                    Vector trail=p.getLocation().subtract(p.getLocation().getDirection().multiply(0.8));
+                    p.getWorld().spawnParticle(Particle.CLOUD,trail,2,0.12,0.08,0.12,0.01);
+                }
             },1L,1L);
             windBoostTasks.put(uid,task);
         } else {
