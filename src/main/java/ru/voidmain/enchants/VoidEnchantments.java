@@ -27,7 +27,9 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Set<UUID> drilling = new HashSet<>();
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
-    private final Map<UUID, Integer> windBoostTasks = new HashMap<>();
+    private final Map<UUID, Integer> radarTasks = new HashMap<>();
+    private final Map<String, Integer> maceHitCounters = new HashMap<>();
+    private final Map<UUID, Float> sneakSpeeds = new HashMap<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
@@ -46,19 +48,23 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("frost","Ледяной клинок","Каждый третий удар замедляет цель",Material.PACKED_ICE,1,false),
         new Spec("venom","Веном","Каждый третий удар отравляет цель",Material.SPIDER_EYE,1,false),
         new Spec("execution","Казнь","Урон ×2 по цели с менее 30% здоровья",Material.IRON_SWORD,1,false),
-        new Spec("thunder","Громовой удар","Шанс молнии при ударе",Material.TRIDENT,3,true),
+        new Spec("thunder","Громовой удар","Молния наносит в 4 раза больше урона",Material.MACE,1,false),
         new Spec("dragonbreath","Дыхание дракона","Шанс тошноты у атакующего",Material.DRAGON_BREATH,1,false),
-        new Spec("sneak","Скороход","Сохраняет скорость при движении крадучись",Material.LEATHER_LEGGINGS,1,false),
+        new Spec("sneak","Скороход","При Shift сохраняет обычную скорость ходьбы и бега",Material.LEATHER_LEGGINGS,1,false),
         new Spec("diver","Водолаз","Увеличивает скорость плавания",Material.HEART_OF_THE_SEA,3,true),
         new Spec("immunity","Иммунитет","Шанс снять отрицательные эффекты",Material.TOTEM_OF_UNDYING,1,false),
         new Spec("softsteps","Мягкие лапки","Снижает урон от падения",Material.FEATHER,3,true),
-        new Spec("lavawalker","Лавоход","Превращает лаву под ногами в обсидиан",Material.OBSIDIAN,1,false),
+        new Spec("lavawalker","Лавоход","Создаёт обсидиан под ногами на 4 секунды",Material.OBSIDIAN,1,false),
         new Spec("owl","Сова","Ночное зрение",Material.SPYGLASS,1,false),
         new Spec("sniper","Снайпер","Усиливает дальний бой из лука",Material.TARGET,3,true),
         new Spec("wisdom","Мудрость","Увеличивает получаемый опыт",Material.BOOK,1,false),
         new Spec("wings","Крылья","Прыжок в элитрах восстанавливает 30% прочности",Material.ELYTRA,1,false),
         new Spec("hover","Парение","Shift позволяет зависать в воздухе",Material.PHANTOM_MEMBRANE,1,false),
-        new Spec("windspeed","Скорость ветра","Удваивает скорость полёта, расходуя прочность ×2",Material.FIREWORK_ROCKET,1,false)
+        new Spec("blackhole","Чёрная дыра","Каждый второй удар булавой обездвиживает цель на 2 секунды",Material.ENDER_EYE,1,false),
+        new Spec("phantomblade","Призрачный клинок","После удара становишься невидимым на 5 секунд",Material.IRON_SWORD,1,false),
+        new Spec("radar","Радар","Обнаруживает игроков и мобов в радиусе 20 блоков",Material.COMPASS,1,false),
+        new Spec("aerodynamics","Аэродинамика","Убирает урон от столкновения с блоками при полёте",Material.ELYTRA,1,false),
+        new Spec("spear_dash","Неутомимый рывок","Рывок копьём не расходует голод",Material.TRIDENT,1,false)
     );
     private final Set<String> singleTier = new HashSet<>();
 
@@ -106,7 +112,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         return n == null ? 1 : n;
     }
     private int rarityTier(Spec s) { return switch(s.key()) {
-        case "wings","execution","thunder" -> 1;
+        case "thunder" -> 1;
+        case "blackhole","spear_dash" -> 5;
+        case "phantomblade","aerodynamics" -> 3;
+        case "radar" -> 4;
+        case "wings","execution" -> 1;
         case "drill","vampirism","sniper","windspeed" -> 2;
         case "veinminer","hover","lavawalker","dragonbreath" -> 3;
         case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
@@ -121,17 +131,21 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private String appliesTo(Spec s) { return switch(s.key()) {
         case "magnet","drill","autosmelt","veinminer","haste","experience" -> "Кирка";
         case "vampirism","frost","venom","execution" -> "Меч";
-        case "thunder" -> "Булава"; case "dragonbreath" -> "Нагрудник";
+        case "thunder","blackhole" -> "Булава";
+        case "phantomblade" -> "Меч";
+        case "radar" -> "Шлем";
+        case "aerodynamics" -> "Элитры";
+        case "spear_dash" -> "Копьё"; case "dragonbreath" -> "Нагрудник";
         case "sneak","diver" -> "Поножи"; case "immunity" -> "Любая броня";
         case "softsteps","lavawalker" -> "Ботинки"; case "owl","wisdom" -> "Шлем";
-        case "sniper" -> "Лук или арбалет"; case "wings","hover","windspeed" -> "Элитры";
+        case "sniper" -> "Лук или арбалет"; case "wings","hover","aerodynamics" -> "Элитры";
         default -> "Неизвестно";
     }; }
     private ItemStack book(Spec s,int lvl) {
         ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta m = item.getItemMeta();
         int tier=rarityTier(s);
-        m.setDisplayName(rarityColor(tier)+s.name());
+        m.setDisplayName(gradient(s.name()));
         m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
             "§7Редкость: "+rarityColor(tier)+rarityName(tier),
             "§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
@@ -220,7 +234,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         for(int i=0;i<specs.size() && i<45;i++) {
             Spec s=specs.get(i); int tier=rarityTier(s);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            m.setDisplayName(rarityColor(tier)+s.name());
+            m.setDisplayName(gradient(s.name()));
             m.setLore(List.of("§7"+s.lore(),"§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Эффект: "+(isEnabled(s.key())?"§aВКЛЮЧЁН":"§cВЫКЛЮЧЕН"),
@@ -356,7 +370,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         int tier=rarityTier(s);
         for(int lvl=1;lvl<=s.max();lvl++) {
             ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
-            meta.setDisplayName(rarityColor(tier)+s.name()+" §7"+roman(lvl));
+            meta.setDisplayName(gradient(s.name())+" §7"+roman(lvl));
             meta.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
@@ -425,6 +439,20 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         p.closeInventory();
     }
 
+    private void immobilize(LivingEntity target) {
+        if(target instanceof Player victim) { float old=victim.getWalkSpeed(); victim.setWalkSpeed(0f); victim.setVelocity(new Vector(0,0,0)); Bukkit.getScheduler().runTaskLater(this,()->{if(victim.isOnline())victim.setWalkSpeed(old);},40L); }
+        else if(target instanceof Mob mob) { boolean old=mob.hasAI(); mob.setAI(false); Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},40L); }
+        else { target.setVelocity(new Vector(0,0,0)); target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,10,true,false)); }
+        target.getWorld().spawnParticle(Particle.PORTAL,target.getLocation().add(0,1,0),35,0.5,0.7,0.5,0.15);
+    }
+    private void updateRadar(Player viewer) {
+        UUID id=viewer.getUniqueId();
+        if(!has(viewer,"radar")) {Integer task=radarTasks.remove(id);if(task!=null)Bukkit.getScheduler().cancelTask(task);return;}
+        if(radarTasks.containsKey(id))return;
+        int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{if(!viewer.isOnline()||!has(viewer,"radar")){Integer active=radarTasks.remove(id);if(active!=null)Bukkit.getScheduler().cancelTask(active);return;}for(Entity entity:viewer.getNearbyEntities(20,20,20))if(entity instanceof LivingEntity && entity!=viewer)viewer.spawnParticle(Particle.END_ROD,entity.getLocation().add(0,1,0),1,0.12,0.25,0.12,0);},0L,10L);
+        radarTasks.put(id,task);
+    }
+    @EventHandler public void onExhaustion(org.bukkit.event.entity.EntityExhaustionEvent e) { if(e.getEntity() instanceof Player p && has(p,"spear_dash")) e.setCancelled(true); }
     private String gradient(String input) {
         int[][] colors = {{155,48,255},{190,112,255},{225,190,255},{255,255,255}};
         StringBuilder out = new StringBuilder();
@@ -443,15 +471,16 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private boolean supports(String key, Material type) {
         return switch(key) {
             case "magnet","drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
-            case "vampirism","frost","venom","execution" -> type.name().endsWith("_SWORD");
-            case "thunder" -> type==Material.MACE;
+            case "vampirism","frost","venom","execution","phantomblade" -> type.name().endsWith("_SWORD");
+            case "thunder","blackhole" -> type==Material.MACE;
             case "dragonbreath" -> type.name().endsWith("_CHESTPLATE");
             case "sneak","diver" -> type.name().endsWith("_LEGGINGS");
             case "immunity" -> type.name().endsWith("_HELMET") || type.name().endsWith("_CHESTPLATE") || type.name().endsWith("_LEGGINGS") || type.name().endsWith("_BOOTS");
             case "softsteps","lavawalker" -> type.name().endsWith("_BOOTS");
-            case "owl","wisdom" -> type.name().endsWith("_HELMET");
+            case "owl","wisdom","radar" -> type.name().endsWith("_HELMET");
             case "sniper" -> type==Material.BOW || type==Material.CROSSBOW;
-            case "wings","hover","windspeed" -> type==Material.ELYTRA;
+            case "wings","hover","aerodynamics" -> type==Material.ELYTRA;
+            case "spear_dash" -> type.name().equals("SPEAR") || type==Material.TRIDENT;
             default -> false;
         };
     }
@@ -598,7 +627,19 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(e.getEntity() instanceof LivingEntity target) {
             if(keys.contains("frost") && hit%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));
             if(keys.contains("venom") && hit%3==0) target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));
-            if(keys.contains("thunder") && Math.random()<0.10*enchantLevel(weapon,"thunder")) target.getWorld().strikeLightningEffect(target.getLocation());
+            if(keys.contains("thunder") && Math.random()<0.12) {
+                target.getWorld().strikeLightning(target.getLocation());
+                target.damage(8.0, p);
+            }
+            if(keys.contains("blackhole") && weapon.getType()==Material.MACE) {
+                String pair=uid+":"+target.getUniqueId();
+                int hits=maceHitCounters.merge(pair,1,Integer::sum);
+                if(hits%2==0) immobilize(target);
+            }
+            if(keys.contains("phantomblade")) {
+                p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY,100,0,true,false,false));
+                p.getWorld().spawnParticle(Particle.SMOKE,p.getLocation().add(0,1,0),18,0.35,0.5,0.35,0.02);
+            }
         }
     }
     @EventHandler public void onDamage(EntityDamageEvent e) {
@@ -606,6 +647,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(has(p,"immunity") && Math.random()<0.20) for(PotionEffect effect:new ArrayList<>(p.getActivePotionEffects())) if(effect.getType().equals(PotionEffectType.SLOWNESS)||effect.getType().equals(PotionEffectType.WEAKNESS)||effect.getType().equals(PotionEffectType.BLINDNESS)||effect.getType().equals(PotionEffectType.POISON)||effect.getType().equals(PotionEffectType.NAUSEA)) p.removePotionEffect(effect.getType());
         int soft=equippedLevel(p,"softsteps"); if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>0) e.setDamage(e.getDamage()*(1-0.30*soft));
         if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>=3)e.setDamage(0);
+        if(e.getCause()==EntityDamageEvent.DamageCause.FLY_INTO_WALL && p.isGliding() && has(p,"aerodynamics")) e.setCancelled(true);
     }
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10)
@@ -614,11 +656,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     @EventHandler public void onMove(PlayerMoveEvent e) {
         Player p=e.getPlayer();
         if(has(p,"owl") && !p.hasPotionEffect(PotionEffectType.NIGHT_VISION)) p.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,260,0,true,false));
+        updateRadar(p);
         if(has(p,"lavawalker")) {
             Block under=p.getLocation().subtract(0,1,0).getBlock();
-            if(under.getType()==Material.LAVA) for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){Block b=under.getRelative(x,0,z);if(b.getType()==Material.LAVA)b.setType(Material.OBSIDIAN);}
+            if(under.getType()==Material.LAVA) for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){Block b=under.getRelative(x,0,z);if(b.getType()==Material.LAVA){b.setType(Material.OBSIDIAN);Location blockLoc=b.getLocation();Bukkit.getScheduler().runTaskLater(this,()->{Block current=blockLoc.getBlock();if(current.getType()==Material.OBSIDIAN)current.setType(Material.LAVA);},80L);}}
         }
-        if(p.isSneaking() && has(p,"sneak") && p.isSprinting()) p.setWalkSpeed(0.2f);
+        if(has(p,"sneak")) { if(p.isSneaking()) { sneakSpeeds.putIfAbsent(p.getUniqueId(),p.getWalkSpeed()); p.setWalkSpeed(0.2f); } else { Float old=sneakSpeeds.remove(p.getUniqueId()); if(old!=null && Math.abs(p.getWalkSpeed()-0.2f)<0.001f)p.setWalkSpeed(old); } }
         if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); }
         // Detect one jump per ground-to-air transition; Bukkit has no PlayerJumpEvent.
         UUID uid = p.getUniqueId();
@@ -630,8 +673,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 int restore = (int) Math.ceil(chest.getType().getMaxDurability() * 0.30);
                 d.setDamage(Math.max(0, d.getDamage() - restore));
                 chest.setItemMeta(d);
-                p.sendMessage(gradient("✦ Крылья восстановили 30% прочности элитр!"));
-            }
+                }
             wingsJumping.add(uid);
         }
     }
@@ -642,51 +684,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         Player p=e.getPlayer(); int lv=equippedLevel(p,"experience"); if(lv>0)e.setAmount(e.getAmount()*(1+lv));
         if(has(p,"wisdom"))e.setAmount(e.getAmount()*2);
     }
-    @EventHandler public void onToggleGlide(EntityToggleGlideEvent e) {
-        if(!(e.getEntity() instanceof Player p)) return;
-        UUID uid=p.getUniqueId();
-        if(e.isGliding() && has(p,"windspeed")) {
-            if(windBoostTasks.containsKey(uid)) return;
-            p.getWorld().playSound(p.getLocation(),Sound.ITEM_ELYTRA_FLYING,0.9f,1.35f);
-            p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),18,0.35,0.25,0.35,0.04);
-            int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{
-                if(!p.isOnline() || !p.isGliding() || !has(p,"windspeed")) {
-                    Integer active=windBoostTasks.remove(uid);
-                    if(active!=null) Bukkit.getScheduler().cancelTask(active);
-                    return;
-                }
-
-                // Drive the player forward along their look direction. Merely multiplying
-                // the current velocity is unreliable because vanilla elytra physics damps it.
-                Vector look=p.getLocation().getDirection();
-                Vector forward=new Vector(look.getX(),0,look.getZ());
-                if(forward.lengthSquared()>0.0001) forward.normalize();
-
-                Vector current=p.getVelocity();
-                Vector horizontal=new Vector(current.getX(),0,current.getZ()).multiply(0.985);
-                horizontal.add(forward.multiply(0.12));
-
-                // A deliberately high but controlled cap makes the enchant clearly faster
-                // than normal gliding without letting velocity grow without bounds.
-                double maxSpeed=2.2;
-                if(horizontal.length()>maxSpeed) horizontal.normalize().multiply(maxSpeed);
-                p.setVelocity(new Vector(horizontal.getX(),current.getY(),horizontal.getZ()));
-
-                if(p.getTicksLived()%4==0) {
-                    Location trail=p.getLocation().subtract(p.getLocation().getDirection().multiply(0.8));
-                    p.getWorld().spawnParticle(Particle.CLOUD,trail,2,0.12,0.08,0.12,0.01);
-                }
-            },1L,1L);
-            windBoostTasks.put(uid,task);
-        } else {
-            Integer task=windBoostTasks.remove(uid);
-            if(task!=null) Bukkit.getScheduler().cancelTask(task);
-        }
-    }
     @EventHandler public void onQuit(PlayerQuitEvent e) {
         UUID uid=e.getPlayer().getUniqueId();
         hitCounters.remove(uid);
-        Integer task=windBoostTasks.remove(uid);
+        maceHitCounters.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
+        sneakSpeeds.remove(uid);
+        Integer task=radarTasks.remove(uid);
         if(task!=null) Bukkit.getScheduler().cancelTask(task);
     }
 }
