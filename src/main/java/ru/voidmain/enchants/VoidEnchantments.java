@@ -489,7 +489,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     private byte entityFlags(Entity entity, boolean glowing) {
         int flags=0;
-        if(entity.isOnFire())flags|=0x01;
+        if(entity instanceof LivingEntity burning && burning.getFireTicks()>0)flags|=0x01;
         if(entity instanceof LivingEntity living && living.isInvisible())flags|=0x20;
         if(entity instanceof Player target){
             if(target.isSneaking())flags|=0x02;
