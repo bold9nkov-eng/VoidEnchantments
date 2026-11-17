@@ -27,6 +27,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Set<UUID> drilling = new HashSet<>();
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
+    private final Map<UUID, Integer> windBoostTasks = new HashMap<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
@@ -495,20 +496,32 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         e.setResult(result);
         inv.setRepairCost(3);
     }
-    private Spec weightedSpec() {
-        int roll=new Random().nextInt(10000);
-        int tier=roll<5?1:roll<35?2:roll<235?3:roll<1735?4:5;
+    private Spec weightedSpec(boolean trade) {
+        // Drops: 60/25/10/4/1. Trades: 60/30/5/3/0.5, normalized to 100%.
+        double[] weights = trade
+            ? new double[]{0.5,3.0,5.0,30.0,60.0}
+            : new double[]{1.0,4.0,10.0,25.0,60.0};
+        double roll=Math.random()*Arrays.stream(weights).sum();
+        int tier=5;
+        for(int i=0;i<weights.length;i++) {
+            roll-=weights[i];
+            if(roll<0) { tier=i+1; break; }
+        }
         List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==tier && isEnabled(x.key())).toList();
         if(pool.isEmpty()) pool=specs.stream().filter(x->isEnabled(x.key())).toList();
-        if(pool.isEmpty()) return null;
-        return pool.get(new Random().nextInt(pool.size()));
+        if(pool.isEmpty()) pool=specs;
+        return pool.isEmpty()?null:pool.get(new Random().nextInt(pool.size()));
+    }
+    private int tradeLevel(Spec chosen) {
+        if(!chosen.leveled() || chosen.max()<=1) return 1;
+        if(Math.random()<0.55) return 1;
+        return 2+new Random().nextInt(chosen.max()-1);
     }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
-        if(Math.random()>0.20) return;
-        Spec chosen=weightedSpec();
+        if(Math.random()>0.35) return;
+        Spec chosen=weightedSpec(true);
         if(chosen==null) return;
-        // Higher enchantment levels cost proportionally more; level I is always the cheapest.
-        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        int lvl=tradeLevel(chosen);
         int emeraldPrice=Math.min(64,8+(lvl-1)*8+new Random().nextInt(5));
         org.bukkit.inventory.MerchantRecipe recipe=new org.bukkit.inventory.MerchantRecipe(book(chosen,lvl),12);
         recipe.addIngredient(new ItemStack(Material.EMERALD,emeraldPrice));
@@ -516,7 +529,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     @EventHandler(priority=EventPriority.HIGH) public void villagerDeath(org.bukkit.event.entity.EntityDeathEvent e) {
         if(!(e.getEntity() instanceof Villager)) return;
-        Spec chosen=weightedSpec();
+        Spec chosen=weightedSpec(false);
         if(chosen==null) return;
         // Guaranteed: every villager death gives exactly one custom book.
         int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
@@ -628,7 +641,32 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(has(p,"wisdom"))e.setAmount(e.getAmount()*2);
     }
     @EventHandler public void onToggleGlide(EntityToggleGlideEvent e) {
-        if(e.getEntity() instanceof Player p && e.isGliding() && has(p,"windspeed")) p.setVelocity(p.getVelocity().multiply(2));
+        if(!(e.getEntity() instanceof Player p)) return;
+        UUID uid=p.getUniqueId();
+        if(e.isGliding() && has(p,"windspeed")) {
+            if(windBoostTasks.containsKey(uid)) return;
+            int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{
+                if(!p.isOnline() || !p.isGliding() || !has(p,"windspeed")) {
+                    Integer active=windBoostTasks.remove(uid);
+                    if(active!=null) Bukkit.getScheduler().cancelTask(active);
+                    return;
+                }
+                Vector v=p.getVelocity();
+                Vector horizontal=new Vector(v.getX(),0,v.getZ()).multiply(1.035);
+                double max=2.5;
+                if(horizontal.length()>max) horizontal.normalize().multiply(max);
+                p.setVelocity(new Vector(horizontal.getX(),v.getY(),horizontal.getZ()));
+            },1L,1L);
+            windBoostTasks.put(uid,task);
+        } else {
+            Integer task=windBoostTasks.remove(uid);
+            if(task!=null) Bukkit.getScheduler().cancelTask(task);
+        }
     }
-    @EventHandler public void onQuit(PlayerQuitEvent e) { hitCounters.remove(e.getPlayer().getUniqueId()); }
+    @EventHandler public void onQuit(PlayerQuitEvent e) {
+        UUID uid=e.getPlayer().getUniqueId();
+        hitCounters.remove(uid);
+        Integer task=windBoostTasks.remove(uid);
+        if(task!=null) Bukkit.getScheduler().cancelTask(task);
+    }
 }
