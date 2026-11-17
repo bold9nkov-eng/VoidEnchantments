@@ -673,7 +673,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 p.setVelocity(new Vector(horizontal.getX(),current.getY(),horizontal.getZ()));
 
                 if(p.getTicksLived()%4==0) {
-                    Vector trail=p.getLocation().subtract(p.getLocation().getDirection().multiply(0.8));
+                    Location trail=p.getLocation().subtract(p.getLocation().getDirection().multiply(0.8));
                     p.getWorld().spawnParticle(Particle.CLOUD,trail,2,0.12,0.08,0.12,0.01);
                 }
             },1L,1L);
