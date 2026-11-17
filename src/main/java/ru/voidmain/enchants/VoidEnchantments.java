@@ -749,6 +749,42 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             wingsJumping.add(uid);
         }
     }
+    @EventHandler public void onDoubleJump(PlayerToggleFlightEvent e) {
+        Player p=e.getPlayer();
+        if(!has(p,"doublejump") || p.getGameMode()==GameMode.CREATIVE || p.getGameMode()==GameMode.SPECTATOR) return;
+        e.setCancelled(true);
+        if(System.currentTimeMillis()<doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L)) return;
+        doubleJumpCooldown.put(p.getUniqueId(),System.currentTimeMillis()+40000L);
+        p.setAllowFlight(false); Vector v=p.getVelocity(); v.setY(0.72); p.setVelocity(v);
+        p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),18,0.35,0.15,0.35,0.08);
+        p.playSound(p.getLocation(),Sound.ENTITY_PHANTOM_FLAP,0.8f,1.4f);
+    }
+    @EventHandler public void onBlockBreak(BlockBreakEvent e) {
+        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); }
+    }
+    @EventHandler public void onInteract(PlayerInteractEvent e) {
+        if(e.getHand()!=EquipmentSlot.HAND) return;
+        Player p=e.getPlayer(); ItemStack item=e.getItem(); if(item==null) return;
+        boolean right=e.getAction()==org.bukkit.event.block.Action.RIGHT_CLICK_AIR || e.getAction()==org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
+        if(!right) return;
+        if(item.getType()==Material.MACE && hasEnchant(item,"bounce")) {
+            Vector v=p.getVelocity(); v.setY(2.2); p.setVelocity(v);
+            p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),30,0.5,0.2,0.5,0.1); e.setCancelled(true); return;
+        }
+        if((item.getType().name().equals("SPEAR") || item.getType()==Material.TRIDENT) && hasEnchant(item,"hook")) {
+            var hit=p.getWorld().rayTraceEntities(p.getEyeLocation(),p.getEyeLocation().getDirection(),5.0,0.8,x->x instanceof LivingEntity && x!=p);
+            if(hit!=null && hit.getHitEntity() instanceof LivingEntity target && p.hasLineOfSight(target)) {
+                Vector pull=p.getLocation().toVector().subtract(target.getLocation().toVector()).normalize().multiply(1.05);
+                pull.setY(Math.max(0.18,pull.getY()+0.15)); target.setVelocity(pull);
+                target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0,true,true));
+            } e.setCancelled(true); return;
+        }
+        if((item.getType().name().equals("SPEAR") || item.getType()==Material.TRIDENT) && hasEnchant(item,"taran")) {
+            int lvl=enchantLevel(item,"taran");
+            Bukkit.getScheduler().runTaskLater(this,()->p.setVelocity(p.getVelocity().add(p.getLocation().getDirection().normalize().multiply(0.12*lvl))),1L);
+        }
+    }
+
     @EventHandler public void onConsume(PlayerItemConsumeEvent e) {
         Player p=e.getPlayer(); if(has(p,"wisdom")) p.giveExp(1);
     }
