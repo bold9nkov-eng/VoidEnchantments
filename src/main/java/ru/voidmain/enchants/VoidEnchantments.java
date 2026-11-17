@@ -507,7 +507,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             roll-=weights[i];
             if(roll<0) { tier=i+1; break; }
         }
-        List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==tier && isEnabled(x.key())).toList();
+        final int selectedTier=tier;
+        List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==selectedTier && isEnabled(x.key())).toList();
         if(pool.isEmpty()) pool=specs.stream().filter(x->isEnabled(x.key())).toList();
         if(pool.isEmpty()) pool=specs;
         return pool.isEmpty()?null:pool.get(new Random().nextInt(pool.size()));
