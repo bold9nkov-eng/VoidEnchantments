@@ -145,7 +145,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta m = item.getItemMeta();
         int tier=rarityTier(s);
-        m.setDisplayName(gradient(s.name()));
+        m.setDisplayName(gradient(s.name(),tier));
         m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
             "§7Редкость: "+rarityColor(tier)+rarityName(tier),
             "§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
@@ -234,7 +234,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         for(int i=0;i<specs.size() && i<45;i++) {
             Spec s=specs.get(i); int tier=rarityTier(s);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            m.setDisplayName(gradient(s.name()));
+            m.setDisplayName(gradient(s.name(),tier));
             m.setLore(List.of("§7"+s.lore(),"§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Эффект: "+(isEnabled(s.key())?"§aВКЛЮЧЁН":"§cВЫКЛЮЧЕН"),
@@ -370,7 +370,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         int tier=rarityTier(s);
         for(int lvl=1;lvl<=s.max();lvl++) {
             ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
-            meta.setDisplayName(gradient(s.name())+" §7"+roman(lvl));
+            meta.setDisplayName(gradient(s.name(),tier)+" §7"+roman(lvl));
             meta.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
@@ -453,8 +453,14 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         radarTasks.put(id,task);
     }
     @EventHandler public void onExhaustion(org.bukkit.event.entity.EntityExhaustionEvent e) { if(e.getEntity() instanceof Player p && has(p,"spear_dash")) e.setCancelled(true); }
-    private String gradient(String input) {
-        int[][] colors = {{155,48,255},{190,112,255},{225,190,255},{255,255,255}};
+    private String gradient(String input, int tier) {
+        int[][] colors = switch(tier) {
+            case 1 -> new int[][]{{255,35,55},{255,105,115},{255,190,195},{255,255,255}};
+            case 2 -> new int[][]{{255,135,25},{255,185,75},{255,225,165},{255,255,255}};
+            case 3 -> new int[][]{{165,55,255},{195,125,255},{230,195,255},{255,255,255}};
+            case 4 -> new int[][]{{35,170,255},{125,210,255},{195,235,255},{255,255,255}};
+            default -> new int[][]{{45,205,105},{125,235,160},{195,250,215},{255,255,255}};
+        };
         StringBuilder out = new StringBuilder();
         int visible = Math.max(1, input.length()-1);
         for (int i=0;i<input.length();i++) {
@@ -468,6 +474,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
         return out.toString();
     }
+    private String gradient(String input) { return gradient(input,3); }
     private boolean supports(String key, Material type) {
         return switch(key) {
             case "magnet","drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
