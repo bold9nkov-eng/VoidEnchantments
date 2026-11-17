@@ -498,6 +498,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     private Spec weightedSpec(boolean trade) {
         // Drops: 60/25/10/4/1. Trades: 60/30/5/3/0.5, normalized to 100%.
+        // Keep selectedTier final for Java lambda capture.
         double[] weights = trade
             ? new double[]{0.5,3.0,5.0,30.0,60.0}
             : new double[]{1.0,4.0,10.0,25.0,60.0};
