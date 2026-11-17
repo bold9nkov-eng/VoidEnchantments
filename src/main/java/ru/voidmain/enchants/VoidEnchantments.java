@@ -537,7 +537,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         ItemStack weapon = p.getInventory().getItemInMainHand();
         if (weapon == null || weapon.getType() == Material.AIR) return;
         String type = weapon.getType().name();
-        if ((type.equals("SPEAR") || weapon.getType() == Material.TRIDENT) && hasEnchant(weapon, "spear_dash")) {
+        if (isSpear(weapon.getType()) && hasEnchant(weapon, "spear_dash")) {
             e.setCancelled(true);
         }
     }
@@ -563,6 +563,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         return out.toString();
     }
     private String gradient(String input) { return gradient(input,3); }
+    private boolean isSpear(Material type) {
+        String name=type.name();
+        return name.equals("SPEAR") || name.endsWith("_SPEAR") || type==Material.TRIDENT;
+    }
+
     private boolean supports(String key, Material type) {
         return switch(key) {
             case "magnet","drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
@@ -575,7 +580,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             case "owl","wisdom","radar" -> type.name().endsWith("_HELMET");
             case "sniper" -> type==Material.BOW || type==Material.CROSSBOW;
             case "wings","hover","aerodynamics" -> type==Material.ELYTRA;
-            case "spear_dash","taran","hook" -> type.name().equals("SPEAR") || type==Material.TRIDENT;
+            case "spear_dash","taran","hook" -> isSpear(type);
             default -> false;
         };
     }
@@ -850,7 +855,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             Vector v=p.getVelocity(); v.setY(2.2); p.setVelocity(v);
             p.getWorld().spawnParticle(Particle.CLOUD,p.getLocation(),30,0.5,0.2,0.5,0.1); e.setCancelled(true); return;
         }
-        if((item.getType().name().equals("SPEAR") || item.getType()==Material.TRIDENT) && hasEnchant(item,"hook")) {
+        if(isSpear(item.getType()) && hasEnchant(item,"hook")) {
             var hit=p.getWorld().rayTraceEntities(p.getEyeLocation(),p.getEyeLocation().getDirection(),5.0,0.8,x->x instanceof LivingEntity && x!=p);
             if(hit!=null && hit.getHitEntity() instanceof LivingEntity target && p.hasLineOfSight(target)) {
                 Vector pull=p.getLocation().toVector().subtract(target.getLocation().toVector()).normalize().multiply(1.05);
@@ -858,7 +863,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0,true,true));
             } e.setCancelled(true); return;
         }
-        if((item.getType().name().equals("SPEAR") || item.getType()==Material.TRIDENT) && hasEnchant(item,"taran")) {
+        if(isSpear(item.getType()) && hasEnchant(item,"taran")) {
             int lvl=enchantLevel(item,"taran");
             Bukkit.getScheduler().runTaskLater(this,()->p.setVelocity(p.getVelocity().add(p.getLocation().getDirection().normalize().multiply(0.12*lvl))),1L);
         }
