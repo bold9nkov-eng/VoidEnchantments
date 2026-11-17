@@ -6,8 +6,9 @@ author: VoidMain
 commands:
   voidenchants:
     aliases: [ve, enchants]
-    description: Каталог зачарований VoidMain
-    usage: /voidenchants
+    description: Каталог и управление кастомными зачарованиями VoidMain
+    usage: /enchants [list|info|apply] или /ve [help|give|giveall|remove|book|reload|debug|drops|admin]
 permissions:
   voidenchants.admin:
+    description: Доступ к административным командам и панели VoidEnchantments
     default: op
