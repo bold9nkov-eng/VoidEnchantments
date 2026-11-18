@@ -1,0 +1,96 @@
+# VoidEnchantments 2.0.0 — Paper 1.21.11 / Java 21
+# Шансы в drop-chance — веса. Реальный шанс каждого чара рассчитывается
+# относительно суммы весов всех включённых чар (админские чары исключены).
+disabled-enchants: []
+
+drops:
+  villager-death:
+    enabled: true
+    guaranteed-one-book: true
+  villager-trade:
+    enabled: true
+    chance: 35.0
+  dungeon-chests:
+    enabled: true
+    chance: 12.0
+    max-books-per-chest: 1
+    structures-only: true
+    allowed-loot-tables:
+      - minecraft:chests/abandoned_mineshaft
+      - minecraft:chests/bastion_treasure
+      - minecraft:chests/buried_treasure
+      - minecraft:chests/desert_pyramid
+      - minecraft:chests/end_city_treasure
+      - minecraft:chests/igloo_chest
+      - minecraft:chests/jungle_temple
+      - minecraft:chests/nether_bridge
+      - minecraft:chests/pillager_outpost
+      - minecraft:chests/ruined_portal
+      - minecraft:chests/shipwreck_treasure
+      - minecraft:chests/simple_dungeon
+      - minecraft:chests/stronghold_corridor
+      - minecraft:chests/stronghold_crossing
+      - minecraft:chests/woodland_mansion
+
+cooldowns:
+  actionbar:
+    enabled: true
+    interval-ticks: 5
+    separator: " §8| "
+    format: "§d{enchant}: §f{seconds}с"
+
+messages:
+  divine-broadcast:
+    enabled: true
+    format: "§d✦ §fИгрок §d{player} §fнашёл божественную книгу §c[{enchant}]§f!"
+  book-found: "§aТы нашёл книгу §f{enchant}§a!"
+  no-permission: "§cНедостаточно прав."
+  removed: "§aЗачарование снято с предмета в руке."
+
+# Вес выбора конкретного зачарования при выпадении книги.
+# 0 = отключить выпадение этого зачарования, даже если оно включено.
+drop-chance:
+  magnet: 4.0
+  woodcutter: 0.5
+  cleave: 1.0
+  stun: 0.05
+  heaviness: 0.5
+  axemaster: 0.5
+  fish: 1.0
+  drill: 0.5
+  autosmelt: 4.0
+  veinminer: 0.5
+  haste: 1.5
+  experience: 1.5
+  vampirism: 0.5
+  frost: 4.0
+  venom: 4.0
+  execution: 0.05
+  thunder: 0.05
+  dragonbreath: 0.5
+  sneak: 4.0
+  diver: 1.5
+  immunity: 4.0
+  softsteps: 4.0
+  lavawalker: 0.5
+  owl: 4.0
+  sniper: 0.5
+  wisdom: 4.0
+  wings: 0.05
+  hover: 0.5
+  blackhole: 0.05
+  phantomblade: 0.5
+  radar: 1.0
+  aerodynamics: 0.5
+  spear_dash: 0.5
+  shadow: 1.0
+  doublejump: 0.5
+  hook: 1.0
+  armorbreaker: 0.5
+  bounce: 0.05
+  waterwalker: 4.0
+
+# Админские зачарования никогда не попадают в обычные таблицы выпадения.
+admin-enchants:
+  require-permission: "voidenchants.admin"
+  obtainable-from-drops: false
