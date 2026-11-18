@@ -757,7 +757,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(!(e.getDamager() instanceof Player p)) return;
         ItemStack weapon=held(p); Set<String> keys=enchantKeys(weapon); if(keys.isEmpty())return;
         UUID uid=p.getUniqueId();
-        if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30) e.setDamage(e.getDamage()*2);
+        if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30 && ready(p,"execution",5000)) { e.setDamage(e.getDamage()*2); visual(p,"execution",le.getLocation()); }
         int hit=hitCounters.merge(uid,1,Integer::sum);
         if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());}
         if(e.getEntity() instanceof LivingEntity target) {
@@ -776,6 +776,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 int lvl=enchantLevel(weapon,"armorbreaker");double ignore=switch(lvl){case 1->0.10;case 2->0.15;default->0.25;};
                 var armor=target.getAttribute(org.bukkit.attribute.Attribute.ARMOR);
                 if(armor!=null){double reduction=Math.min(0.80,armor.getValue()*0.04);e.setDamage(e.getDamage()/(1.0-reduction*ignore));}
+            }
+            if(weapon.getType().name().endsWith("_AXE")) {
+                if(keys.contains("cleave") && Math.random()<0.15 && ready(p,"cleave",5000)) { target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS,100,0,true,true)); visual(p,"cleave",target.getLocation()); }
+                if(keys.contains("stun") && hit%3==0 && ready(p,"stun",8000)) { immobilize(target); visual(p,"stun",target.getLocation()); }
+                if(keys.contains("heaviness") && hit%2==0 && ready(p,"heaviness",3000)) { target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,20,1,true,true)); visual(p,"heaviness",target.getLocation()); }
+                if(keys.contains("axemaster")) { int lv=enchantLevel(weapon,"axemaster"); double ignore=.05*lv; var arm=target.getAttribute(org.bukkit.attribute.Attribute.ARMOR); if(arm!=null){double reduction=Math.min(.80,arm.getValue()*.04);e.setDamage(e.getDamage()/(1.0-reduction*ignore));} if(ready(p,"axemaster",2500))visual(p,"axemaster",target.getLocation()); }
             }
             if(keys.contains("phantomblade")&&ready(p,"phantomblade",7000)) {
                 p.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY,100,0,true,false,false));visual(p,"phantomblade",p.getLocation());
