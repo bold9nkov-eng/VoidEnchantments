@@ -16,6 +16,7 @@ import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
+import org.bukkit.event.world.LootGenerateEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.*;
@@ -204,12 +205,13 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private boolean isEnabled(String key) { return !getConfig().getStringList("disabled-enchants").contains(key); }
     private long cooldownLeft(UUID uuid,String key) { return Math.max(0L,procCooldowns.getOrDefault(uuid+":"+key,0L)-System.currentTimeMillis()); }
     private void updateCooldownBar(Player p) {
+        if(!getConfig().getBoolean("cooldowns.actionbar.enabled",true)) return;
         List<String> lines=new ArrayList<>();
         for(Spec sp:specs) {
             long left=cooldownLeft(p.getUniqueId(),sp.key());
             if(left>0 && has(p,sp.key())) lines.add("§d"+sp.name()+": §f"+((left+999)/1000)+"с");
         }
-        if(!lines.isEmpty()) p.sendActionBar(Component.text(String.join(" §8| ",lines)));
+        p.sendActionBar(Component.text(lines.isEmpty()?"":String.join(getConfig().getString("cooldowns.actionbar.separator"," §8| "),lines)));
     }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
     private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
@@ -695,7 +697,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         return 2+new Random().nextInt(chosen.max()-1);
     }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
-        if(Math.random()>0.35) return;
+        if(!getConfig().getBoolean("drops.villager-trade.enabled",true)) return;
+        if(Math.random()>getConfig().getDouble("drops.villager-trade.chance",35.0)/100.0) return;
         Spec chosen=weightedSpec(true);
         if(chosen==null) return;
         int lvl=tradeLevel(chosen);
@@ -705,6 +708,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         e.setRecipe(recipe);
     }
     @EventHandler(priority=EventPriority.HIGH) public void villagerDeath(org.bukkit.event.entity.EntityDeathEvent e) {
+        if(!getConfig().getBoolean("drops.villager-death.enabled",true)) return;
         if(!(e.getEntity() instanceof Villager)) return;
         Spec chosen=weightedSpec(false);
         if(chosen==null) return;
@@ -712,9 +716,28 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
         ItemStack reward=book(chosen,lvl);
         e.getDrops().add(reward);
+        if(rarityTier(chosen)==1 && getConfig().getBoolean("messages.divine-broadcast.enabled",true)) {
+            String message=getConfig().getString("messages.divine-broadcast.format","§d✦ §f{player} нашёл §c[{enchant}]§f!")
+                .replace("{player}",e.getEntity().getName()).replace("{enchant}",chosen.name());
+            for(Player online:Bukkit.getOnlinePlayers()) online.sendMessage(message);
+        }
         getConfig().set("drop-count."+chosen.key(),getConfig().getInt("drop-count."+chosen.key(),0)+1);
         saveConfig();
         getLogger().info("Villager dropped custom enchantment book: "+chosen.key()+" level "+lvl);
+    }
+
+    @EventHandler(priority=EventPriority.HIGH)
+    public void onDungeonLoot(LootGenerateEvent e) {
+        if(!getConfig().getBoolean("drops.dungeon-chests.enabled",true)) return;
+        String table=e.getLootTable().getKey().toString();
+        List<String> allowed=getConfig().getStringList("drops.dungeon-chests.allowed-loot-tables");
+        if(!allowed.isEmpty() && !allowed.contains(table)) return;
+        double chance=Math.max(0,Math.min(100,getConfig().getDouble("drops.dungeon-chests.chance",12.0)));
+        if(Math.random()*100.0>=chance) return;
+        Spec chosen=weightedSpec(false);
+        if(chosen==null) return;
+        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        e.getLoot().add(book(chosen,lvl));
     }
 
     @EventHandler public void onMine(BlockBreakEvent e) {
