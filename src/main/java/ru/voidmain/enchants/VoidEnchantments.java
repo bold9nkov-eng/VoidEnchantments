@@ -251,7 +251,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         List<String> lines=new ArrayList<>();
         for(Spec sp:specs) {
             long left=cooldownLeft(p.getUniqueId(),sp.key());
-            if(left>0 && has(p,sp.key())) lines.add("§d"+sp.name()+": §f"+((left+999)/1000)+"с");
+            if(left>0 && has(p,sp.key())) lines.add(getConfig().getString("cooldowns.actionbar.format","§d{enchant}: §f{seconds}с").replace("{enchant}",sp.name()).replace("{seconds}",String.valueOf((left+999)/1000)));
         }
         p.sendActionBar(Component.text(lines.isEmpty()?"":String.join(getConfig().getString("cooldowns.actionbar.separator"," §8| "),lines)));
     }
@@ -1043,7 +1043,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack item=e.getItem();
         if(item.getType()!=Material.SHIELD || !hasEnchant(item,"unbreakable")) return;
         int hits=shieldAxeHits.getOrDefault(e.getPlayer().getUniqueId(),0);
-        if(hits%5!=0) e.setCancelled(true); else e.setDamage(Math.max(1,e.getDamage()));
+        if(hits%5!=0) e.setCancelled(true); else { e.setDamage(item.getType().getMaxDurability()); shieldAxeHits.put(e.getPlayer().getUniqueId(),0); }
     }
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
         if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
