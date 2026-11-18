@@ -44,6 +44,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Location> shadowPositions = new HashMap<>();
     private final Map<UUID, Integer> shadowTasks = new HashMap<>();
     private final Set<Location> lavaBlocks = new HashSet<>();
+    private final Set<Location> creatorBlocks = new HashSet<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
@@ -255,7 +256,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
     private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
-    private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key())).mapToDouble(this::dropChance).sum(); }
+    private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key()) && rarityTier(x)>0).mapToDouble(this::dropChance).sum(); }
     private String chanceText(Spec s) { double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
     private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
     private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;switch(key) {
@@ -651,7 +652,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private String gradient(String input, int tier) {
         int[][] colors = switch(tier) {
-            case 1 -> new int[][]{{255,35,55},{255,105,115},{255,190,195},{255,255,255}};
+            case 0,1 -> new int[][]{{255,35,55},{255,105,115},{255,190,195},{255,255,255}};
             case 2 -> new int[][]{{255,135,25},{255,185,75},{255,225,165},{255,255,255}};
             case 3 -> new int[][]{{165,55,255},{195,125,255},{230,195,255},{255,255,255}};
             case 4 -> new int[][]{{35,170,255},{125,210,255},{195,235,255},{255,255,255}};
@@ -861,7 +862,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(ench.contains("secondwind") && defender.getHealth()<=6.0 && ready(defender,"secondwind",30000L)) { defender.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,60,1,true,true)); visual(defender,"secondwind",defender.getLocation()); }
         if(ench.contains("bloodsucker") && ready(defender,"bloodsucker",configuredCooldown("bloodsucker",15000L))) { int lvl=enchantLevel(shield,"bloodsucker"); defender.setHealth(Math.min(defender.getMaxHealth(),defender.getHealth()+lvl)); visual(defender,"bloodsucker",defender.getLocation()); }
         if(ench.contains("shove") && ready(defender,"shove",configuredCooldown("shove",20000L))) { int lvl=enchantLevel(shield,"shove"); Vector knock=attacker.getLocation().toVector().subtract(defender.getLocation().toVector()).normalize().multiply(2.0+lvl); knock.setY(0.35); attacker.setVelocity(knock); visual(defender,"shove",attacker.getLocation()); }
-        if(ench.contains("lightaura") && ready(defender,"lightaura",configuredCooldown("lightaura",Math.max(96000L,120000L-12000L*(enchantLevel(shield,"lightaura")-1))))) {
+        if(ench.contains("lightaura") && ready(defender,"lightaura",configuredCooldown("lightaura-level-"+roman(enchantLevel(shield,"lightaura")),Math.max(96000L,120000L-12000L*(enchantLevel(shield,"lightaura")-1))))) {
             for(Entity near:defender.getNearbyEntities(5,5,5)) if(near instanceof LivingEntity victim && victim!=defender) {
                 long duration=20L*(1+enchantLevel(shield,"lightaura"));
                 victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS,(int)duration,0,true,true));
@@ -875,9 +876,21 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(!(e.getDamager() instanceof Player p)) return;
         ItemStack weapon=held(p); Set<String> keys=enchantKeys(weapon); if(keys.isEmpty())return;
         UUID uid=p.getUniqueId();
-        if(keys.contains("moon")) { long t=p.getWorld().getTime(); e.setDamage(e.getDamage()*((t>=13000 && t<=23000)?1.30:0.70)); visual(p,"moon",p.getLocation()); }
+        if(keys.contains("moon")) { long t=p.getWorld().getTime(); e.setDamage(e.getDamage()*((t>=13000 && t<=23000)?1.30:0.70)); if(ready(p,"moon-visual",1500L)) visual(p,"moon",p.getLocation()); }
         if(keys.contains("godslayer") && e.getEntity() instanceof Player) { e.setDamage(e.getDamage()*2.0); visual(p,"godslayer",e.getEntity().getLocation()); }
-        if(keys.contains("worldeater") && weapon.getType()==Material.MACE && p.getFallDistance()>=2.0f) { e.setDamage(e.getDamage()*2.0); p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+4.0)); visual(p,"worldeater",p.getLocation()); }
+        if(keys.contains("worldeater") && weapon.getType()==Material.MACE && p.getFallDistance()>=2.0f) {
+            double raw=e.getDamage()*2.0;
+            if(e.getEntity() instanceof LivingEntity victim) {
+                var armor=victim.getAttribute(org.bukkit.attribute.Attribute.ARMOR);
+                var toughness=victim.getAttribute(org.bukkit.attribute.Attribute.ARMOR_TOUGHNESS);
+                if(armor!=null) {
+                    double a=armor.getValue(), tgh=toughness==null?0:toughness.getValue();
+                    double reduction=Math.min(20.0,Math.max(a/5.0,a-raw/(2.0+tgh/4.0)))/25.0;
+                    raw=raw/Math.max(0.01,1.0-reduction);
+                }
+            }
+            e.setDamage(raw); p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+4.0)); visual(p,"worldeater",p.getLocation());
+        }
         if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30 && ready(p,"execution",5000)) { e.setDamage(e.getDamage()*2); visual(p,"execution",le.getLocation()); }
         int hit=hitCounters.merge(uid,1,Integer::sum);
         if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());}
@@ -1015,6 +1028,10 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         doubleJumpCooldown.put(p.getUniqueId(),System.currentTimeMillis()+40000L);
         p.setAllowFlight(false);Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);visual(p,"doublejump",p.getLocation());
     }
+    @EventHandler public void onCreatorBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
+        ItemStack item=e.getItemInHand();
+        if(item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE)) creatorBlocks.add(e.getBlockPlaced().getLocation());
+    }
     @EventHandler public void onShieldItemDamage(PlayerItemDamageEvent e) {
         ItemStack item=e.getItem();
         if(item.getType()!=Material.SHIELD || !hasEnchant(item,"unbreakable")) return;
@@ -1023,6 +1040,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
         if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
+        if(creatorBlocks.contains(e.getBlock().getLocation()) && !e.getPlayer().hasPermission("voidenchants.admin")) { e.setCancelled(true); e.getPlayer().sendMessage("§cБлок Творца нельзя сломать."); return; }
+        if(creatorBlocks.contains(e.getBlock().getLocation())) creatorBlocks.remove(e.getBlock().getLocation());
         if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand")) {
             e.setCancelled(true); Block block=e.getBlock(); block.setType(Material.AIR,false);
             ItemStack drop=new ItemStack(Material.NETHERITE_BLOCK); ItemMeta meta=drop.getItemMeta();
