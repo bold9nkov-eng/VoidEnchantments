@@ -136,8 +136,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
     private int rarityTier(Spec s) { return switch(s.key()) {
         case "thunder" -> 1;
-        case "blackhole","spear_dash" -> 1;
-        case "shadow","hook","cleave" -> 2;
+        case "blackhole","spear_dash","stun" -> 1;
+        case "shadow","hook","cleave","fish" -> 2;
         case "armorbreaker","axemaster","doublejump","woodcutter","stun" -> 3;
         case "bounce","heaviness" -> 1;
         case "waterwalker" -> 4;
@@ -146,7 +146,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "wings","execution" -> 1;
         case "drill","vampirism","sniper" -> 2;
         case "veinminer","hover","lavawalker","dragonbreath" -> 3;
-        case "magnet","autosmelt","experience","frost","venom","immunity","softsteps","fish" -> 4;
+        case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
         default -> 5;
     }; }
     private String rarityName(int t) { return switch(t) {
@@ -167,7 +167,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "radar" -> "Шлем";
         case "aerodynamics" -> "Элитры";
         case "spear_dash","hook" -> "Копьё";
-        case "heartshield","dragonbreath" -> "Нагрудник";
+        case "dragonbreath" -> "Нагрудник";
         case "shadow","sneak","diver" -> "Поножи";
         case "doublejump","waterwalker","softsteps","lavawalker" -> "Ботинки";
         case "immunity" -> "Любая броня"; case "owl","wisdom" -> "Шлем";
@@ -763,9 +763,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(e.getEntity() instanceof LivingEntity target) {
             if(keys.contains("frost")&&hit%3==0&&ready(p,"frost",4000)){target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));visual(p,"frost",target.getLocation());}
             if(keys.contains("venom")&&hit%3==0&&ready(p,"venom",5000)){target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));visual(p,"venom",target.getLocation());}
-            if(keys.contains("thunder") && Math.random()<0.12) {
-                target.getWorld().strikeLightning(target.getLocation());
-                target.damage(15.0, p);
+            if(keys.contains("thunder") && Math.random()<0.12 && ready(p,"thunder",7000)) {
+                target.getWorld().strikeLightning(target.getLocation()); target.damage(15.0,p); visual(p,"thunder",target.getLocation());
             }
             if(keys.contains("blackhole") && weapon.getType()==Material.MACE) {
                 String pair=uid+":"+target.getUniqueId();
@@ -792,14 +791,13 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
 
     @EventHandler public void onDamage(EntityDamageEvent e) {
         if(!(e.getEntity() instanceof Player p)) return;
-        if(has(p,"immunity") && Math.random()<0.20) for(PotionEffect effect:new ArrayList<>(p.getActivePotionEffects())) if(effect.getType().equals(PotionEffectType.SLOWNESS)||effect.getType().equals(PotionEffectType.WEAKNESS)||effect.getType().equals(PotionEffectType.BLINDNESS)||effect.getType().equals(PotionEffectType.POISON)||effect.getType().equals(PotionEffectType.NAUSEA)) p.removePotionEffect(effect.getType());
-        int soft=equippedLevel(p,"softsteps"); if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>0) e.setDamage(e.getDamage()*(1-0.30*soft));
+        if(has(p,"immunity") && Math.random()<0.20 && ready(p,"immunity",10000)) { for(PotionEffect effect:new ArrayList<>(p.getActivePotionEffects())) if(effect.getType().equals(PotionEffectType.SLOWNESS)||effect.getType().equals(PotionEffectType.WEAKNESS)||effect.getType().equals(PotionEffectType.BLINDNESS)||effect.getType().equals(PotionEffectType.POISON)||effect.getType().equals(PotionEffectType.NAUSEA)) p.removePotionEffect(effect.getType()); visual(p,"immunity",p.getLocation()); }
+        int soft=equippedLevel(p,"softsteps"); if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>0) { e.setDamage(e.getDamage()*(1-0.30*soft)); if(ready(p,"softsteps",3000))visual(p,"softsteps",p.getLocation()); }
         if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>=3)e.setDamage(0);
-        if(e.getCause()==EntityDamageEvent.DamageCause.FLY_INTO_WALL && p.isGliding() && has(p,"aerodynamics")) e.setCancelled(true);
+        if(e.getCause()==EntityDamageEvent.DamageCause.FLY_INTO_WALL && p.isGliding() && has(p,"aerodynamics")) { e.setCancelled(true); if(ready(p,"aerodynamics",2500))visual(p,"aerodynamics",p.getLocation()); }
     }
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
-        if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10)
-            attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0));
+        if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10 && ready(victim,"dragonbreath",8000)) { attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0)); visual(victim,"dragonbreath",attacker.getLocation()); }
     }
     private void makeSurface(Player p, Material source, Material replacement, long ticks, boolean lava) {
         Block under=p.getLocation().subtract(0,1,0).getBlock(); if(under.getType()!=source)return;
@@ -831,7 +829,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
 
         if(has(p,"doublejump") && System.currentTimeMillis()>=doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L) && !p.isFlying() && !p.isGliding() && !p.isOnGround()) p.setAllowFlight(true);
         else if(!p.isFlying() && !p.isGliding() && p.isOnGround() && p.getGameMode()!=GameMode.CREATIVE && p.getGameMode()!=GameMode.SPECTATOR) p.setAllowFlight(false);
-        if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); }
+        if(has(p,"hover") && p.isSneaking() && !p.isOnGround()) { p.setVelocity(new Vector(p.getVelocity().getX(),0,p.getVelocity().getZ())); p.setFallDistance(0); if(ready(p,"hover",5000))visual(p,"hover",p.getLocation()); }
         // Detect one jump per ground-to-air transition; Bukkit has no PlayerJumpEvent.
         UUID uid = p.getUniqueId();
         if (p.isOnGround()) {
