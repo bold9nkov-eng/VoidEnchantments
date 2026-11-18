@@ -480,9 +480,12 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         return List.of();
     }
     private void openCatalog(Player p,int page) {
+        int pageSize=45;
+        int maxPage=Math.max(0,(specs.size()-1)/pageSize);
+        page=Math.max(0,Math.min(page,maxPage));
         Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
-        int start=page*45;
-        for(int i=0;i<45 && start+i<specs.size();i++) {
+        int start=page*pageSize;
+        for(int i=0;i<pageSize && start+i<specs.size();i++) {
             Spec s=specs.get(start+i);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
             int tier=rarityTier(s);
@@ -494,8 +497,23 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
             icon.setItemMeta(m); inv.setItem(i,icon);
         }
+
+        ItemStack previous=new ItemStack(page>0?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta pm=previous.getItemMeta();
+        pm.setDisplayName(page>0?"§d← Предыдущая страница":"§8Первая страница");
+        pm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
+        pm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.max(0,page-1));
+        previous.setItemMeta(pm); inv.setItem(45,previous);
+
         ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
         cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
+
+        ItemStack next=new ItemStack(page<maxPage?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta nm=next.getItemMeta();
+        nm.setDisplayName(page<maxPage?"§dСледующая страница →":"§8Последняя страница");
+        nm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
+        nm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
+        next.setItemMeta(nm); inv.setItem(53,next);
         p.openInventory(inv);
     }
     private void openLevelMenu(Player p,Spec s) {
@@ -583,6 +601,14 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack clicked=e.getCurrentItem();
         if(clicked==null || clicked.getType()==Material.AIR) return;
         if(e.getRawSlot()==49 && clicked.getType()==Material.BARRIER) { p.closeInventory(); return; }
+        if(e.getRawSlot()==45 || e.getRawSlot()==53) {
+            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
+            if(targetPage!=null) {
+                p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f);
+                openCatalog(p,targetPage);
+            }
+            return;
+        }
         Spec selected=findSpec(id(clicked));
         if(selected==null) return;
         if(selected.leveled()) { openLevelMenu(p,selected); return; }
