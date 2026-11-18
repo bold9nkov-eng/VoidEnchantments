@@ -16,6 +16,7 @@ import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
+import net.kyori.adventure.text.Component;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.*;
 import org.bukkit.persistence.PersistentDataType;
@@ -99,6 +100,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         Objects.requireNonNull(getCommand("voidenchants")).setExecutor(this);
         Objects.requireNonNull(getCommand("voidenchants")).setTabCompleter(this);
         getConfig().options().copyDefaults(true);
+        saveDefaultConfig();
+        Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(this::updateCooldownBar),5L,5L);
         saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
     }
@@ -199,6 +202,15 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
 
     private boolean isEnabled(String key) { return !getConfig().getStringList("disabled-enchants").contains(key); }
+    private long cooldownLeft(UUID uuid,String key) { return Math.max(0L,procCooldowns.getOrDefault(uuid+":"+key,0L)-System.currentTimeMillis()); }
+    private void updateCooldownBar(Player p) {
+        List<String> lines=new ArrayList<>();
+        for(Spec sp:specs) {
+            long left=cooldownLeft(p.getUniqueId(),sp.key());
+            if(left>0 && has(p,sp.key())) lines.add("§d"+sp.name()+": §f"+((left+999)/1000)+"с");
+        }
+        if(!lines.isEmpty()) p.sendActionBar(Component.text(String.join(" §8| ",lines)));
+    }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
     private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
     private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key())).mapToDouble(this::dropChance).sum(); }
@@ -355,6 +367,14 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 Spec s=findSpec(args[1]); if(s==null) { sender.sendMessage("§cЗачарование не найдено."); return true; }
                 giveBook(p,s,args.length>2?parseLevel(s,args[2]):1); sender.sendMessage("§aКнига выдана.");
             }
+            case "strip" -> {
+                if(!(sender instanceof Player p)) { sender.sendMessage("§cКоманда только для игрока."); return true; }
+                if(args.length<2) { sender.sendMessage("§c/ve strip <чар> — снять чар с предмета в руке"); return true; }
+                Spec selected=findSpec(args[1]); ItemStack hand=p.getInventory().getItemInMainHand();
+                if(selected==null || hand.getType()==Material.AIR) { sender.sendMessage("§cУкажи зачарование и держи предмет в руке."); return true; }
+                boolean removed=removeEnchantFromItem(hand,selected); p.updateInventory();
+                sender.sendMessage(removed?"§aЗачарование снято с предмета в руке.":"§eНа предмете нет этого зачарования.");
+            }
             case "remove" -> {
                 if(args.length<3) { sender.sendMessage("§c/ve remove <игрок> <чар>"); return true; }
                 Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
@@ -389,13 +409,13 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args) {
         boolean admin=sender.hasPermission("voidenchants.admin");
         List<String> roots=new ArrayList<>(List.of("help","list","info","apply"));
-        if(admin) roots.addAll(List.of("give","giveall","remove","book","reload","debug","drops","admin"));
+        if(admin) roots.addAll(List.of("give","giveall","remove","strip","book","reload","debug","drops","admin"));
         if(args.length==1) return roots.stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         String sub=args[0].toLowerCase(Locale.ROOT);
         if(!admin && !List.of("info","apply","list","help").contains(sub)) return List.of();
         if(args.length==2 && List.of("give","remove","debug").contains(sub) && admin)
             return Bukkit.getOnlinePlayers().stream().map(Player::getName).filter(x->x.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
-        if((args.length==2 && List.of("info","giveall","book").contains(sub)) || (args.length==3 && List.of("give","remove").contains(sub))) {
+        if((args.length==2 && List.of("info","giveall","book","strip").contains(sub)) || (args.length==3 && List.of("give","remove").contains(sub))) {
             return specs.stream().map(Spec::key).filter(x->x.startsWith(args[args.length-1].toLowerCase(Locale.ROOT))).toList();
         }
         if((args.length==4 && sub.equals("give")) || (args.length==3 && List.of("giveall","book").contains(sub))) return List.of("1","2","3","4");
@@ -662,7 +682,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         inv.setRepairCost(3);
     }
     private Spec weightedSpec(boolean trade) {
-        List<Spec> pool=specs.stream().filter(x->isEnabled(x.key()) && dropChance(x)>0).toList();
+        List<Spec> pool=specs.stream().filter(x->isEnabled(x.key()) && rarityTier(x)>0 && dropChance(x)>0).toList();
         if(pool.isEmpty()) return null;
         double total=pool.stream().mapToDouble(this::dropChance).sum();
         double roll=Math.random()*total;
@@ -791,15 +811,17 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10 && ready(victim,"dragonbreath",8000)) { attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0)); visual(victim,"dragonbreath",attacker.getLocation()); }
     }
-    private void makeSurface(Player p, Material source, Material replacement, long ticks, boolean lava) {
-        Block under=p.getLocation().subtract(0,1,0).getBlock(); if(under.getType()!=source)return;
+    private boolean makeSurface(Player p, Material source, Material replacement, long ticks, boolean lava) {
+        Block under=p.getLocation().subtract(0,1,0).getBlock(); if(under.getType()!=source)return false;
+        int changed=0;
         int cx=under.getX(),cy=under.getY(),cz=under.getZ();
         for(int x=-2;x<=2;x++) for(int z=-2;z<=2;z++) {
             if(x*x+z*z>5)continue;
             Block b=under.getWorld().getBlockAt(cx+x,cy,cz+z); if(b.getType()!=source)continue;
-            Location loc=b.getLocation(); b.setType(replacement,false); if(lava)lavaBlocks.add(loc);
+            Location loc=b.getLocation(); b.setType(replacement,false); changed++; if(lava)lavaBlocks.add(loc);
             Bukkit.getScheduler().runTaskLater(this,()->{Block now=loc.getBlock();if(now.getType()==replacement)now.setType(source,false);lavaBlocks.remove(loc);},ticks);
         }
+        return changed>0;
     }
 
     @EventHandler public void onMove(PlayerMoveEvent e) {
@@ -807,10 +829,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         if(has(p,"owl")&&!p.hasPotionEffect(PotionEffectType.NIGHT_VISION)){p.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,260,0,true,false));if(ready(p,"owl",10000))visual(p,"owl",p.getLocation());}
         if(has(p,"fish")&&!p.hasPotionEffect(PotionEffectType.WATER_BREATHING)){p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING,260,0,true,false));if(p.isInWater()&&ready(p,"fish",8000))visual(p,"fish",p.getLocation());}
         updateRadar(p);
-        if(has(p,"lavawalker")) makeSurface(p,Material.LAVA,Material.OBSIDIAN,80L,true);
-        if(has(p,"waterwalker")) makeSurface(p,Material.WATER,Material.BLUE_ICE,60L,false);
-        if(has(p,"lavawalker")&&ready(p,"lavawalker",2500))visual(p,"lavawalker",p.getLocation());
-        if(has(p,"waterwalker")&&ready(p,"waterwalker",2500))visual(p,"waterwalker",p.getLocation());
+        if(has(p,"lavawalker") && makeSurface(p,Material.LAVA,Material.OBSIDIAN,80L,true) && ready(p,"lavawalker",2500)) visual(p,"lavawalker",p.getLocation());
+        if(has(p,"waterwalker") && makeSurface(p,Material.WATER,Material.BLUE_ICE,60L,false) && ready(p,"waterwalker",2500)) visual(p,"waterwalker",p.getLocation());
         if(has(p,"sneak")) {
             var attr=p.getAttribute(org.bukkit.attribute.Attribute.SNEAKING_SPEED);
             if(attr!=null) {
@@ -877,7 +897,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             Vector v=p.getVelocity(); v.setY(2.2); p.setVelocity(v);
             visual(p,"bounce",p.getLocation());e.setCancelled(true);return;
         }
-        if(isSpear(item.getType()) && hasEnchant(item,"hook")) {
+        if(isSpear(item.getType()) && hasEnchant(item,"hook") && ready(p,"hook",8000)) {
             var hit=p.getWorld().rayTraceEntities(p.getEyeLocation(),p.getEyeLocation().getDirection(),5.0,0.8,x->x instanceof LivingEntity && x!=p);
             if(hit!=null && hit.getHitEntity() instanceof LivingEntity target && p.hasLineOfSight(target)) {
                 Vector pull=p.getLocation().toVector().subtract(target.getLocation().toVector()).normalize().multiply(1.05);
