@@ -36,7 +36,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Integer> radarTasks = new HashMap<>();
     private final Map<UUID, Map<Integer, Entity>> radarTargets = new HashMap<>();
     private final Map<String, Integer> maceHitCounters = new HashMap<>();
-    private final Map<UUID, Double> sneakSpeeds = new HashMap<>();
+    private final Map<UUID, Double> sneakSpeeds = new HashMap<>(), berserkBase = new HashMap<>();
     private final Map<UUID, Long> doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<String,Long> procCooldowns=new HashMap<>();
     private final Map<UUID,Integer> shieldAxeHits=new HashMap<>();
@@ -161,9 +161,10 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "shadow","hook","cleave","fish" -> 2;
         case "armorbreaker","axemaster","doublejump","woodcutter","heaviness" -> 3;
         case "bounce" -> 1;
-        case "waterwalker","chameleon" -> 4;
-        case "reflection","unbreakable","titanshield" -> 4;
-        case "secondwind","bloodsucker","shove","berserk" -> 3;
+        case "waterwalker" -> 4;
+        case "chameleon","unbreakable","titanshield" -> 1;
+        case "reflection","shove" -> 3;
+        case "secondwind","bloodsucker","berserk" -> 2;
         case "moon" -> 2;
         case "phantomblade","aerodynamics" -> 3;
         case "radar" -> 4;
@@ -257,7 +258,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
     private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
     private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key()) && rarityTier(x)>0).mapToDouble(this::dropChance).sum(); }
-    private String chanceText(Spec s) { double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
+    private String chanceText(Spec s) { if(rarityTier(s)==0) return "только админам"; double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
     private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
     private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;switch(key) {
         case "moon" -> {w.spawnParticle(Particle.END_ROD,l,12,.3,.5,.3,.02);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.8f,1.8f);}
@@ -857,7 +858,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Set<String> ench=enchantKeys(shield); if(ench.isEmpty()) return;
         if(ench.contains("titanshield") && ready(defender,"titanshield",configuredCooldown("titanshield",8000L))) { e.setCancelled(true); visual(defender,"titanshield",defender.getLocation()); return; }
         if(!(e.getDamager() instanceof LivingEntity attacker)) return;
-        if(ench.contains("reflection")) { attacker.damage(e.getFinalDamage()*0.15,defender); visual(defender,"reflection",attacker.getLocation()); }
+        if(ench.contains("reflection")) { attacker.damage(e.getDamage()*0.15,defender); visual(defender,"reflection",attacker.getLocation()); }
         if(ench.contains("unbreakable") && e.getDamager() instanceof Player axeUser && axeUser.getInventory().getItemInMainHand().getType().name().endsWith("_AXE")) shieldAxeHits.merge(defender.getUniqueId(),1,Integer::sum);
         if(ench.contains("secondwind") && defender.getHealth()<=6.0 && ready(defender,"secondwind",30000L)) { defender.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,60,1,true,true)); visual(defender,"secondwind",defender.getLocation()); }
         if(ench.contains("bloodsucker") && ready(defender,"bloodsucker",configuredCooldown("bloodsucker",15000L))) { int lvl=enchantLevel(shield,"bloodsucker"); defender.setHealth(Math.min(defender.getMaxHealth(),defender.getHealth()+lvl)); visual(defender,"bloodsucker",defender.getLocation()); }
@@ -943,15 +944,21 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         else if(biome.contains("DESERT") || biome.contains("BADLANDS")) { p.setFoodLevel(20); p.setSaturation(20f); p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE,100,0,true,false)); }
         else if(p.getWorld().getEnvironment()==World.Environment.NETHER) p.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE,100,0,true,false));
         else if(biome.contains("FOREST") || biome.contains("TAIGA") || biome.contains("JUNGLE")) p.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,100,0,true,false));
+        if(ready(p,"chameleon-visual",8000L)) visual(p,"chameleon",p.getLocation());
     }
     private void updateBerserk(Player p) {
         if(!held(p).getType().name().endsWith("_AXE")) { resetBerserk(p); return; }
         var attr=p.getAttribute(org.bukkit.attribute.Attribute.ATTACK_SPEED); if(attr==null)return;
+        berserkBase.putIfAbsent(p.getUniqueId(),attr.getBaseValue());
         double hp=p.getHealth()/p.getMaxHealth();
         double bonus=hp<0.10?3.2:hp<0.40?2.0:hp<0.70?0.8:0.0;
-        attr.setBaseValue(4.0+bonus);
+        attr.setBaseValue(berserkBase.get(p.getUniqueId())+bonus);
     }
-    private void resetBerserk(Player p) { var attr=p.getAttribute(org.bukkit.attribute.Attribute.ATTACK_SPEED); if(attr!=null && attr.getBaseValue()>4.0) attr.setBaseValue(4.0); }
+    private void resetBerserk(Player p) {
+        var attr=p.getAttribute(org.bukkit.attribute.Attribute.ATTACK_SPEED);
+        Double old=berserkBase.remove(p.getUniqueId());
+        if(attr!=null && old!=null) attr.setBaseValue(old);
+    }
     private boolean makeSurface(Player p, Material source, Material replacement, long ticks, boolean lava) {
         Block under=p.getLocation().subtract(0,1,0).getBlock(); if(under.getType()!=source)return false;
         int changed=0;
@@ -1076,7 +1083,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         UUID uid=e.getPlayer().getUniqueId();
         hitCounters.remove(uid);
         maceHitCounters.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
-        sneakSpeeds.remove(uid);
+        sneakSpeeds.remove(uid); berserkBase.remove(uid);
         doubleJumpCooldown.remove(uid);procCooldowns.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
         shadowSince.remove(uid); shadowPositions.remove(uid);
         Integer shadowTask=shadowTasks.remove(uid); if(shadowTask!=null)Bukkit.getScheduler().cancelTask(shadowTask);
