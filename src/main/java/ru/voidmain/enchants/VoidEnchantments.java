@@ -138,7 +138,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "thunder" -> 1;
         case "blackhole","spear_dash","stun" -> 1;
         case "shadow","hook","cleave","fish" -> 2;
-        case "armorbreaker","axemaster","doublejump","woodcutter","stun" -> 3;
+        case "armorbreaker","axemaster","doublejump","woodcutter" -> 3;
         case "bounce","heaviness" -> 1;
         case "waterwalker" -> 4;
         case "phantomblade","aerodynamics" -> 3;
