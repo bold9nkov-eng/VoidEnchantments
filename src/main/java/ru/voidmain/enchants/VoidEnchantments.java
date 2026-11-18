@@ -644,6 +644,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @EventHandler(priority=EventPriority.HIGHEST)
     public void onExhaustion(org.bukkit.event.entity.EntityExhaustionEvent e) {
         if (!(e.getEntity() instanceof Player p)) return;
+        String biome=p.getLocation().getBlock().getBiome().name();
+        if(has(p,"chameleon") && (biome.contains("DESERT") || biome.contains("BADLANDS"))) { e.setCancelled(true); return; }
         ItemStack weapon = p.getInventory().getItemInMainHand();
         if (weapon == null || weapon.getType() == Material.AIR) return;
         String type = weapon.getType().name();
@@ -924,6 +926,14 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
     }
 
+    @EventHandler public void onProjectileDamage(EntityDamageByEntityEvent e) {
+        if(!(e.getDamager() instanceof Projectile projectile) || !(projectile.getShooter() instanceof Player shooter)) return;
+        ItemStack bow=null;
+        for(ItemStack item:shooter.getInventory().getContents()) if(item!=null && (item.getType()==Material.BOW || item.getType()==Material.CROSSBOW) && hasEnchant(item,"sniper")) { bow=item; break; }
+        if(bow==null) return;
+        int level=enchantLevel(bow,"sniper"); e.setDamage(e.getDamage()*(1.0+0.10*level));
+        if(ready(shooter,"sniper",2000L)) visual(shooter,"sniper",e.getEntity().getLocation());
+    }
     @EventHandler public void onDamage(EntityDamageEvent e) {
         if(!(e.getEntity() instanceof Player p)) return;
         if(has(p,"immortality") && e.getFinalDamage()>=p.getHealth() && ready(p,"immortality",configuredCooldown("immortality",20000L))) {
@@ -976,6 +986,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Player p=e.getPlayer();
         if(has(p,"chameleon")) applyChameleon(p);
         if(has(p,"owl")&&!p.hasPotionEffect(PotionEffectType.NIGHT_VISION)){p.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,260,0,true,false));if(ready(p,"owl",10000))visual(p,"owl",p.getLocation());}
+        if(has(p,"diver") && inWater(p) && !p.hasPotionEffect(PotionEffectType.DOLPHINS_GRACE)) { int lv=Math.max(1,equippedLevel(p,"diver")); p.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE,100,lv-1,true,false)); if(ready(p,"diver",6000L)) visual(p,"diver",p.getLocation()); }
         if(has(p,"fish") && inWater(p) && !p.hasPotionEffect(PotionEffectType.WATER_BREATHING)){p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING,260,0,true,false));if(p.isInWater()&&ready(p,"fish",8000))visual(p,"fish",p.getLocation());}
         updateRadar(p);
         if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);
@@ -1077,8 +1088,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
     }
 
-    @EventHandler public void onConsume(PlayerItemConsumeEvent e) { Player p=e.getPlayer(); if(has(p,"wisdom"))p.giveExp(1); }
-    @EventHandler public void onExp(PlayerExpChangeEvent e) { Player p=e.getPlayer(); int lv=equippedLevel(p,"experience"); if(lv>0)e.setAmount(e.getAmount()*(1+lv)); if(has(p,"wisdom"))e.setAmount(e.getAmount()*2); }
+    @EventHandler public void onConsume(PlayerItemConsumeEvent e) { Player p=e.getPlayer(); if(has(p,"wisdom")) { p.giveExp(1); if(ready(p,"wisdom",3000L)) visual(p,"wisdom",p.getLocation()); } }
+    @EventHandler public void onExp(PlayerExpChangeEvent e) { Player p=e.getPlayer(); int lv=equippedLevel(p,"experience"); if(lv>0) { e.setAmount(e.getAmount()*(1+lv)); if(ready(p,"experience-visual",3000L)) visual(p,"experience",p.getLocation()); } if(has(p,"wisdom")) { e.setAmount(e.getAmount()*2); if(ready(p,"wisdom-visual",3000L)) visual(p,"wisdom",p.getLocation()); } }
     @EventHandler public void onQuit(PlayerQuitEvent e) {
         UUID uid=e.getPlayer().getUniqueId();
         hitCounters.remove(uid);
