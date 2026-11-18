@@ -119,7 +119,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         getConfig().options().copyDefaults(true);
         saveDefaultConfig();
         loadCreatorBlocks();
-        Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(p->{updateCooldownBar(p); if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);}),5L,5L);
+        Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(p->{updateCooldownBar(p); refreshDiver(p); if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);}),5L,5L);
         saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
     }
@@ -963,6 +963,18 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             data.add(loc.getWorld().getName()+";"+loc.getBlockX()+";"+loc.getBlockY()+";"+loc.getBlockZ());
         getConfig().set("admin-enchants.creator-blocks",data); saveConfig();
     }
+    private void refreshDiver(Player p) {
+        if (!has(p,"diver") || !inWater(p)) return;
+        int level = Math.max(1, Math.min(3, equippedLevel(p,"diver")));
+        int amplifier = level - 1;
+        PotionEffect current = p.getPotionEffect(PotionEffectType.DOLPHINS_GRACE);
+        // Reapply periodically so the bonus remains active even when the player is swimming without triggering move events.
+        if (current == null || current.getAmplifier() < amplifier || current.getDuration() < 25) {
+            p.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE,40,amplifier,true,false),true);
+        }
+        if (ready(p,"diver",6000L)) visual(p,"diver",p.getLocation());
+    }
+
     private boolean inWater(Player p) { return p.isInWater() || p.getLocation().getBlock().getType()==Material.WATER; }
     private void applyChameleon(Player p) {
         String biome=p.getLocation().getBlock().getBiome().name();
@@ -1002,7 +1014,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Player p=e.getPlayer();
         if(has(p,"chameleon")) applyChameleon(p);
         if(has(p,"owl")&&!p.hasPotionEffect(PotionEffectType.NIGHT_VISION)){p.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,260,0,true,false));if(ready(p,"owl",10000))visual(p,"owl",p.getLocation());}
-        if(has(p,"diver") && inWater(p) && !p.hasPotionEffect(PotionEffectType.DOLPHINS_GRACE)) { int lv=Math.max(1,equippedLevel(p,"diver")); p.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE,100,lv-1,true,false)); if(ready(p,"diver",6000L)) visual(p,"diver",p.getLocation()); }
         if(has(p,"fish") && inWater(p) && !p.hasPotionEffect(PotionEffectType.WATER_BREATHING)){p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING,260,0,true,false));if(p.isInWater()&&ready(p,"fish",8000))visual(p,"fish",p.getLocation());}
         updateRadar(p);
         if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);
