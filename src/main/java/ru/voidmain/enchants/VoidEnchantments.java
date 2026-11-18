@@ -138,8 +138,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         case "thunder" -> 1;
         case "blackhole","spear_dash","stun" -> 1;
         case "shadow","hook","cleave","fish" -> 2;
-        case "armorbreaker","axemaster","doublejump","woodcutter" -> 3;
-        case "bounce","heaviness" -> 1;
+        case "armorbreaker","axemaster","doublejump","woodcutter","heaviness" -> 3;
+        case "bounce" -> 1;
         case "waterwalker" -> 4;
         case "phantomblade","aerodynamics" -> 3;
         case "radar" -> 4;
@@ -202,7 +202,8 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private boolean isEnabled(String key) { return !getConfig().getStringList("disabled-enchants").contains(key); }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
     private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
-    private String chanceText(Spec s) { return String.format(Locale.US,"%.2f",dropChance(s)).replaceAll("\\.?0+$","")+"%"; }
+    private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key())).mapToDouble(this::dropChance).sum(); }
+    private String chanceText(Spec s) { double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
     private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
     private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;switch(key) {
         case "woodcutter" -> {w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f);}
@@ -662,22 +663,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         inv.setRepairCost(3);
     }
     private Spec weightedSpec(boolean trade) {
-        // Drops: 60/25/10/4/1. Trades: 60/30/5/3/0.5, normalized to 100%.
-        // Keep selectedTier final for Java lambda capture.
-        double[] weights = trade
-            ? new double[]{0.5,3.0,5.0,30.0,60.0}
-            : new double[]{1.0,4.0,10.0,25.0,60.0};
-        double roll=Math.random()*Arrays.stream(weights).sum();
-        int tier=5;
-        for(int i=0;i<weights.length;i++) {
-            roll-=weights[i];
-            if(roll<0) { tier=i+1; break; }
-        }
-        final int selectedTier=tier;
-        List<Spec> pool=specs.stream().filter(x -> rarityTier(x)==selectedTier && isEnabled(x.key())).toList();
-        if(pool.isEmpty()) pool=specs.stream().filter(x->isEnabled(x.key())).toList();
-        if(pool.isEmpty()) pool=specs;
-        return pool.isEmpty()?null:pool.get(new Random().nextInt(pool.size()));
+        List<Spec> pool=specs.stream().filter(x->isEnabled(x.key()) && dropChance(x)>0).toList();
+        if(pool.isEmpty()) return null;
+        double total=pool.stream().mapToDouble(this::dropChance).sum();
+        double roll=Math.random()*total;
+        for(Spec candidate:pool) { roll-=dropChance(candidate); if(roll<=0) return candidate; }
+        return pool.get(pool.size()-1);
     }
     private int tradeLevel(Spec chosen) {
         if(!chosen.leveled() || chosen.max()<=1) return 1;
