@@ -1,4 +1,4 @@
-# VoidEnchantments 2.0.0 — Paper 1.21.11 / Java 21
+# VoidEnchantments 2.1.0 — Paper 1.21.11 / Java 21
 # Шансы в drop-chance — веса. Реальный шанс каждого чара рассчитывается
 # относительно суммы весов всех включённых чар (админские чары исключены).
 disabled-enchants: []
@@ -38,6 +38,31 @@ cooldowns:
     interval-ticks: 5
     separator: " §8| "
     format: "§d{enchant}: §f{seconds}с"
+  seconds:
+    hook: 8
+    bounce: 12
+    doublejump: 40
+    immortality: 20
+    titanshield: 8
+    bloodsucker: 15
+    shove: 20
+    lightaura-level-I: 120
+    lightaura-level-II: 108
+    lightaura-level-III: 96
+
+compatibility:
+  max-enchants-per-item: 2
+  blocked-pairs:
+    - "godslayer:execution"
+    - "godslayer:vampirism"
+    - "moon:godslayer"
+    - "worldeater:blackhole"
+    - "worldeater:bounce"
+  conflict-groups:
+    - name: shield-active-skills
+      enchants: [titanshield, lightaura, secondwind, bloodsucker, shove]
+    - name: armor-survival
+      enchants: [immortality, immunity, dragonbreath, chameleon]
 
 messages:
   divine-broadcast:
@@ -89,8 +114,19 @@ drop-chance:
   armorbreaker: 0.5
   bounce: 0.05
   waterwalker: 4.0
+  moon: 0.15
+  chameleon: 0.5
+  berserk: 0.5
+  reflection: 0.5
+  secondwind: 0.5
+  unbreakable: 0.5
+  lightaura: 0.05
+  shove: 0.5
+  bloodsucker: 0.5
+  titanshield: 0.5
 
 # Админские зачарования никогда не попадают в обычные таблицы выпадения.
 admin-enchants:
   require-permission: "voidenchants.admin"
   obtainable-from-drops: false
+  creator-block-chance: 0.10
