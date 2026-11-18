@@ -118,6 +118,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Objects.requireNonNull(getCommand("voidenchants")).setTabCompleter(this);
         getConfig().options().copyDefaults(true);
         saveDefaultConfig();
+        loadCreatorBlocks();
         Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(p->{updateCooldownBar(p); if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);}),5L,5L);
         saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
@@ -947,6 +948,21 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10 && ready(victim,"dragonbreath",8000)) { attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0)); visual(victim,"dragonbreath",attacker.getLocation()); }
     }
+    private void loadCreatorBlocks() {
+        for(String raw:getConfig().getStringList("admin-enchants.creator-blocks")) {
+            String[] part=raw.split(";");
+            if(part.length!=4) continue;
+            World world=Bukkit.getWorld(part[0]); if(world==null) continue;
+            try { creatorBlocks.add(new Location(world,Integer.parseInt(part[1]),Integer.parseInt(part[2]),Integer.parseInt(part[3]))); }
+            catch(NumberFormatException ignored) {}
+        }
+    }
+    private void saveCreatorBlocks() {
+        List<String> data=new ArrayList<>();
+        for(Location loc:creatorBlocks) if(loc.getWorld()!=null)
+            data.add(loc.getWorld().getName()+";"+loc.getBlockX()+";"+loc.getBlockY()+";"+loc.getBlockZ());
+        getConfig().set("admin-enchants.creator-blocks",data); saveConfig();
+    }
     private boolean inWater(Player p) { return p.isInWater() || p.getLocation().getBlock().getType()==Material.WATER; }
     private void applyChameleon(Player p) {
         String biome=p.getLocation().getBlock().getBiome().name();
@@ -1048,7 +1064,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     @EventHandler public void onCreatorBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
         ItemStack item=e.getItemInHand();
-        if(item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE)) creatorBlocks.add(e.getBlockPlaced().getLocation());
+        if(item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE)) creatorBlocks.add(e.getBlockPlaced().getLocation()); saveCreatorBlocks();
     }
     @EventHandler public void onShieldItemDamage(PlayerItemDamageEvent e) {
         ItemStack item=e.getItem();
@@ -1059,7 +1075,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
         if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
         if(creatorBlocks.contains(e.getBlock().getLocation()) && !e.getPlayer().hasPermission("voidenchants.admin")) { e.setCancelled(true); e.getPlayer().sendMessage("§cБлок Творца нельзя сломать."); return; }
-        if(creatorBlocks.contains(e.getBlock().getLocation())) creatorBlocks.remove(e.getBlock().getLocation());
+        if(creatorBlocks.contains(e.getBlock().getLocation())) { creatorBlocks.remove(e.getBlock().getLocation()); saveCreatorBlocks(); }
         if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand")) {
             e.setCancelled(true); Block block=e.getBlock(); block.setType(Material.AIR,false);
             ItemStack drop=new ItemStack(Material.NETHERITE_BLOCK); ItemMeta meta=drop.getItemMeta();
