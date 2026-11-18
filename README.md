@@ -5,7 +5,7 @@ Custom enchantments for VoidMain (Paper 1.21.11 / Java 21).
 ## Build
 `mvn clean package`
 
-Artifact: `target/VoidEnchantments-1.0.0.jar`
+Artifact: `target/VoidEnchantments-2.0.0.jar`
 
 ## Commands
 - `/voidenchants` — open enchantment catalog
