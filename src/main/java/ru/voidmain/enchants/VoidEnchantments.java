@@ -850,7 +850,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @EventHandler(priority=EventPriority.HIGH)
     public void onShieldBlock(EntityDamageByEntityEvent e) {
         if(!(e.getEntity() instanceof Player defender) || !defender.isBlocking()) return;
-        ItemStack shield=defender.getInventory().getOffHand();
+        ItemStack shield=defender.getInventory().getItemInOffHand();
         if(shield.getType()!=Material.SHIELD) shield=defender.getInventory().getItemInMainHand();
         if(shield.getType()!=Material.SHIELD) return;
         Set<String> ench=enchantKeys(shield); if(ench.isEmpty()) return;
