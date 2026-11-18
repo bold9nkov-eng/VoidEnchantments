@@ -514,10 +514,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         p.closeInventory();
     }
 
-    private void immobilize(LivingEntity target) {
-        if(target instanceof Player victim) { float old=victim.getWalkSpeed(); victim.setWalkSpeed(0f); victim.setVelocity(new Vector(0,0,0)); Bukkit.getScheduler().runTaskLater(this,()->{if(victim.isOnline())victim.setWalkSpeed(old);},40L); }
-        else if(target instanceof Mob mob) { boolean old=mob.hasAI(); mob.setAI(false); Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},40L); }
-        else { target.setVelocity(new Vector(0,0,0)); target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,10,true,false)); }
+    private void immobilize(LivingEntity target) { immobilize(target,40L); }
+    private void immobilize(LivingEntity target,long ticks) {
+        if(target instanceof Player victim) { float old=victim.getWalkSpeed(); victim.setWalkSpeed(0f); victim.setVelocity(new Vector(0,0,0)); Bukkit.getScheduler().runTaskLater(this,()->{if(victim.isOnline())victim.setWalkSpeed(old);},ticks); }
+        else if(target instanceof Mob mob) { boolean old=mob.hasAI(); mob.setAI(false); Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},ticks); }
+        else { target.setVelocity(new Vector(0,0,0)); target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false)); }
         target.getWorld().spawnParticle(Particle.PORTAL,target.getLocation().add(0,1,0),35,0.5,0.7,0.5,0.15);
     }
     private byte entityFlags(Entity entity, boolean glowing) {
@@ -717,6 +718,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
                 if(rest.isEmpty()) drop.remove(); else drop.setItemStack(rest.values().iterator().next());
             }
         });}
+        for(String key:List.of("autosmelt","drill","veinminer","haste","experience")) if(enchants.contains(key)&&ready(p,key,2500))visual(p,key,e.getBlock().getLocation().add(.5,.5,.5));
         if(enchants.contains("autosmelt")) {
             Collection<ItemStack> drops=e.getBlock().getDrops(tool,p);
             List<ItemStack> cooked=new ArrayList<>();
@@ -778,7 +780,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
             }
             if(weapon.getType().name().endsWith("_AXE")) {
                 if(keys.contains("cleave") && Math.random()<0.15 && ready(p,"cleave",5000)) { target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS,100,0,true,true)); visual(p,"cleave",target.getLocation()); }
-                if(keys.contains("stun") && hit%3==0 && ready(p,"stun",8000)) { immobilize(target); visual(p,"stun",target.getLocation()); }
+                if(keys.contains("stun") && hit%3==0 && ready(p,"stun",8000)) { immobilize(target,30L); visual(p,"stun",target.getLocation()); }
                 if(keys.contains("heaviness") && hit%2==0 && ready(p,"heaviness",3000)) { target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,20,1,true,true)); visual(p,"heaviness",target.getLocation()); }
                 if(keys.contains("axemaster")) { int lv=enchantLevel(weapon,"axemaster"); double ignore=.05*lv; var arm=target.getAttribute(org.bukkit.attribute.Attribute.ARMOR); if(arm!=null){double reduction=Math.min(.80,arm.getValue()*.04);e.setDamage(e.getDamage()/(1.0-reduction*ignore));} if(ready(p,"axemaster",2500))visual(p,"axemaster",target.getLocation()); }
             }
@@ -848,6 +850,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         Player p=e.getPlayer(); UUID id=p.getUniqueId();
         Integer old=shadowTasks.remove(id); if(old!=null)Bukkit.getScheduler().cancelTask(old);
         if(!e.isSneaking() || !has(p,"shadow")) { shadowSince.remove(id); shadowPositions.remove(id); p.removePotionEffect(PotionEffectType.INVISIBILITY); return; }
+        visual(p,"shadow",p.getLocation());
         Location[] anchor={p.getLocation().clone()}; long[] stillSince={System.currentTimeMillis()};
         int task=Bukkit.getScheduler().scheduleSyncRepeatingTask(this,()->{
             if(!p.isOnline() || !p.isSneaking() || !has(p,"shadow")) {
