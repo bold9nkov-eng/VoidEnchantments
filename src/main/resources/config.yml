@@ -130,3 +130,4 @@ admin-enchants:
   require-permission: "voidenchants.admin"
   obtainable-from-drops: false
   creator-block-chance: 0.10
+  creator-blocks: []
