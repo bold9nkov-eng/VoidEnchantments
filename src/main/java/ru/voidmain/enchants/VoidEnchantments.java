@@ -39,6 +39,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Double> sneakSpeeds = new HashMap<>();
     private final Map<UUID, Long> doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<String,Long> procCooldowns=new HashMap<>();
+    private final Map<UUID,Integer> shieldAxeHits=new HashMap<>();
     private final Set<UUID> treeBreaking=new HashSet<>();
     private final Map<UUID, Location> shadowPositions = new HashMap<>();
     private final Map<UUID, Integer> shadowTasks = new HashMap<>();
@@ -67,7 +68,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("frost","Ледяной клинок","Каждый третий удар замедляет цель",Material.PACKED_ICE,1,false),
         new Spec("venom","Веном","Каждый третий удар отравляет цель",Material.SPIDER_EYE,1,false),
         new Spec("execution","Казнь","Урон ×2 по цели с менее 30% здоровья",Material.IRON_SWORD,1,false),
-        new Spec("thunder","Громовой удар","Молния наносит в 4 раза больше урона",Material.MACE,1,false),
+        new Spec("thunder","Тор","Улучшенная молния с шансом 20%",Material.MACE,1,false),
         new Spec("dragonbreath","Дыхание дракона","Шанс тошноты у атакующего",Material.DRAGON_BREATH,1,false),
         new Spec("sneak","Скороход","При Shift сохраняет обычную скорость ходьбы и бега",Material.LEATHER_LEGGINGS,1,false),
         new Spec("diver","Водолаз","Увеличивает скорость плавания",Material.HEART_OF_THE_SEA,3,true),
@@ -116,7 +117,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Objects.requireNonNull(getCommand("voidenchants")).setTabCompleter(this);
         getConfig().options().copyDefaults(true);
         saveDefaultConfig();
-        Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(this::updateCooldownBar),5L,5L);
+        Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(p->{updateCooldownBar(p); if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);}),5L,5L);
         saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
     }
@@ -856,13 +857,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(ench.contains("titanshield") && ready(defender,"titanshield",configuredCooldown("titanshield",8000L))) { e.setCancelled(true); visual(defender,"titanshield",defender.getLocation()); return; }
         if(!(e.getDamager() instanceof LivingEntity attacker)) return;
         if(ench.contains("reflection")) { attacker.damage(e.getFinalDamage()*0.15,defender); visual(defender,"reflection",attacker.getLocation()); }
+        if(ench.contains("unbreakable") && e.getDamager() instanceof Player axeUser && axeUser.getInventory().getItemInMainHand().getType().name().endsWith("_AXE")) shieldAxeHits.merge(defender.getUniqueId(),1,Integer::sum);
         if(ench.contains("secondwind") && defender.getHealth()<=6.0 && ready(defender,"secondwind",30000L)) { defender.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,60,1,true,true)); visual(defender,"secondwind",defender.getLocation()); }
         if(ench.contains("bloodsucker") && ready(defender,"bloodsucker",configuredCooldown("bloodsucker",15000L))) { int lvl=enchantLevel(shield,"bloodsucker"); defender.setHealth(Math.min(defender.getMaxHealth(),defender.getHealth()+lvl)); visual(defender,"bloodsucker",defender.getLocation()); }
-        if(ench.contains("shove") && ready(defender,"shove",configuredCooldown("shove",20000L))) { int lvl=enchantLevel(shield,"shove"); Vector knock=attacker.getLocation().toVector().subtract(defender.getLocation().toVector()).normalize().multiply(2.0+lvl*0.35); knock.setY(0.35); attacker.setVelocity(knock); visual(defender,"shove",attacker.getLocation()); }
-        if(ench.contains("lightaura") && ready(defender,"lightaura",configuredCooldown("lightaura",120000L))) {
+        if(ench.contains("shove") && ready(defender,"shove",configuredCooldown("shove",20000L))) { int lvl=enchantLevel(shield,"shove"); Vector knock=attacker.getLocation().toVector().subtract(defender.getLocation().toVector()).normalize().multiply(2.0+lvl); knock.setY(0.35); attacker.setVelocity(knock); visual(defender,"shove",attacker.getLocation()); }
+        if(ench.contains("lightaura") && ready(defender,"lightaura",configuredCooldown("lightaura",Math.max(96000L,120000L-12000L*(enchantLevel(shield,"lightaura")-1))))) {
             for(Entity near:defender.getNearbyEntities(5,5,5)) if(near instanceof LivingEntity victim && victim!=defender) {
-                victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS,40,0,true,true));
-                victim.addPotionEffect(new PotionEffect(PotionEffectType.POISON,40,0,true,true)); victim.damage(2.0,defender);
+                long duration=20L*(1+enchantLevel(shield,"lightaura"));
+                victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS,(int)duration,0,true,true));
+                victim.addPotionEffect(new PotionEffect(PotionEffectType.POISON,(int)duration,0,true,true)); victim.damage(2.0,defender);
             }
             visual(defender,"lightaura",defender.getLocation());
         }
@@ -881,7 +884,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(e.getEntity() instanceof LivingEntity target) {
             if(keys.contains("frost")&&hit%3==0&&ready(p,"frost",4000)){target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));visual(p,"frost",target.getLocation());}
             if(keys.contains("venom")&&hit%3==0&&ready(p,"venom",5000)){target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));visual(p,"venom",target.getLocation());}
-            if(keys.contains("thunder") && Math.random()<0.12 && ready(p,"thunder",7000)) {
+            if(keys.contains("thunder") && Math.random()<0.20 && ready(p,"thunder",7000)) {
                 target.getWorld().strikeLightning(target.getLocation()); target.damage(15.0,p); visual(p,"thunder",target.getLocation());
             }
             if(keys.contains("blackhole") && weapon.getType()==Material.MACE) {
@@ -929,6 +932,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         else if(biome.contains("FOREST") || biome.contains("TAIGA") || biome.contains("JUNGLE")) p.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,100,0,true,false));
     }
     private void updateBerserk(Player p) {
+        if(!held(p).getType().name().endsWith("_AXE")) { resetBerserk(p); return; }
         var attr=p.getAttribute(org.bukkit.attribute.Attribute.ATTACK_SPEED); if(attr==null)return;
         double hp=p.getHealth()/p.getMaxHealth();
         double bonus=hp<0.10?3.2:hp<0.40?2.0:hp<0.70?0.8:0.0;
@@ -1011,9 +1015,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         doubleJumpCooldown.put(p.getUniqueId(),System.currentTimeMillis()+40000L);
         p.setAllowFlight(false);Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);visual(p,"doublejump",p.getLocation());
     }
+    @EventHandler public void onShieldItemDamage(PlayerItemDamageEvent e) {
+        ItemStack item=e.getItem();
+        if(item.getType()!=Material.SHIELD || !hasEnchant(item,"unbreakable")) return;
+        int hits=shieldAxeHits.getOrDefault(e.getPlayer().getUniqueId(),0);
+        if(hits%5!=0) e.setCancelled(true); else e.setDamage(Math.max(1,e.getDamage()));
+    }
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
         if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
-        if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand") && e.getPlayer().hasPermission("voidenchants.admin")) {
+        if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand")) {
             e.setCancelled(true); Block block=e.getBlock(); block.setType(Material.AIR,false);
             ItemStack drop=new ItemStack(Material.NETHERITE_BLOCK); ItemMeta meta=drop.getItemMeta();
             meta.setDisplayName("§c§lБлок Творца"); meta.setLore(List.of("§7Создан зачарованием §cДлань Творца"));
