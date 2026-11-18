@@ -89,7 +89,21 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("hook","Крюк","ПКМ притягивает врага в радиусе 5 блоков и отравляет на 5 секунд",Material.LEAD,1,false),
         new Spec("armorbreaker","Сокрушитель брони","Игнорирует часть брони: I 10%, II 15%, III 25%",Material.NETHERITE_SWORD,3,true),
         new Spec("bounce","Отскок","ПКМ с булавой подбрасывает вверх примерно на 25 блоков",Material.MACE,1,false),
-        new Spec("waterwalker","Водоход","Создаёт синий лёд под ногами на 3 секунды",Material.BLUE_ICE,1,false)
+        new Spec("waterwalker","Водоход","Создаёт синий лёд под ногами на 3 секунды",Material.BLUE_ICE,1,false),
+new Spec("moon","Луна","Ночью +30% урона, днём −30% урона",Material.CLOCK,1,false),
+new Spec("chameleon","Хамелеон","Эффекты зависят от биома",Material.TURTLE_HELMET,1,false),
+new Spec("berserk","Берсерк","Скорость атаки топором растёт при низком здоровье",Material.IRON_AXE,1,false),
+new Spec("godslayer","Убийца Богов","Наносит двойной урон игрокам",Material.NETHERITE_SWORD,1,false),
+new Spec("worldeater","Пожиратель Миров","Удар булавой с высоты: двойной урон и +2 сердца",Material.MACE,1,false),
+new Spec("immortality","Бессмертие","Смертельный удар оставляет 1 сердце; защита 2 секунды",Material.TOTEM_OF_UNDYING,1,false),
+new Spec("creatorhand","Длань Творца","Позволяет разрушать бедрок и барьеры",Material.BEDROCK,1,false),
+new Spec("reflection","Отражение","Отражает 15% заблокированного урона",Material.SHIELD,1,false),
+new Spec("secondwind","Второе дыхание","При блоке на низком здоровье даёт регенерацию II",Material.GHAST_TEAR,1,false),
+new Spec("unbreakable","Не ломаемый","Щит выдерживает пять ударов топором",Material.SHIELD,1,false),
+new Spec("lightaura","Аура света","Ослепляет, отравляет и ранит врагов при блоке",Material.GLOWSTONE,3,true),
+new Spec("shove","Толчок","Отбрасывает атакующего при блоке",Material.PISTON,3,true),
+new Spec("bloodsucker","Кровопийца","Восстанавливает здоровье при блоке",Material.REDSTONE,3,true),
+new Spec("titanshield","Щит Титана","Блокирует удар щитом независимо от направления",Material.SHIELD,1,false)
     );
     private final Set<String> singleTier = new HashSet<>();
 
@@ -139,12 +153,16 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         return n == null ? 1 : n;
     }
     private int rarityTier(Spec s) { return switch(s.key()) {
-        case "thunder" -> 1;
+        case "godslayer","worldeater","immortality","creatorhand" -> 0;
+        case "thunder","lightaura" -> 1;
         case "blackhole","spear_dash","stun" -> 1;
         case "shadow","hook","cleave","fish" -> 2;
         case "armorbreaker","axemaster","doublejump","woodcutter","heaviness" -> 3;
         case "bounce" -> 1;
-        case "waterwalker" -> 4;
+        case "waterwalker","chameleon" -> 4;
+        case "reflection","unbreakable","titanshield" -> 4;
+        case "secondwind","bloodsucker","shove","berserk" -> 3;
+        case "moon" -> 2;
         case "phantomblade","aerodynamics" -> 3;
         case "radar" -> 4;
         case "wings","execution" -> 1;
@@ -154,13 +172,19 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         default -> 5;
     }; }
     private String rarityName(int t) { return switch(t) {
-        case 1 -> "Божественное"; case 2 -> "Легендарное"; case 3 -> "Эпическое"; case 4 -> "Редкое"; default -> "Необычное";
+        case 0 -> "АДМИНСКОЕ"; case 1 -> "Божественное"; case 2 -> "Легендарное"; case 3 -> "Эпическое"; case 4 -> "Редкое"; default -> "Необычное";
     }; }
     private String rarityColor(int t) { return switch(t) {
-        case 1 -> "§c"; case 2 -> "§6"; case 3 -> "§5"; case 4 -> "§b"; default -> "§a";
+        case 0 -> "§c§l"; case 1 -> "§c"; case 2 -> "§6"; case 3 -> "§5"; case 4 -> "§b"; default -> "§a";
     }; }
     private String appliesTo(Spec s) { return switch(s.key()) {
         case "magnet" -> "Кирка, лопата или топор";
+        case "moon","godslayer" -> "Меч";
+        case "chameleon","immortality" -> "Нагрудник";
+        case "berserk" -> "Топор";
+        case "worldeater" -> "Булава";
+        case "creatorhand" -> "Кирка";
+        case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> "Щит";
         case "woodcutter","cleave","stun","heaviness","axemaster" -> "Топор";
         case "fish" -> "Шлем";
         case "drill","autosmelt","veinminer","haste","experience" -> "Кирка";
@@ -203,6 +227,21 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     }
 
     private boolean isEnabled(String key) { return !getConfig().getStringList("disabled-enchants").contains(key); }
+    private boolean adminOnly(String key) { Spec sp=spec(key); return sp!=null && rarityTier(sp)==0; }
+    private long configuredCooldown(String key,long fallback) { return Math.max(0L,getConfig().getLong("cooldowns.seconds."+key, fallback/1000L))*1000L; }
+    private boolean canCombine(ItemStack target,String key) {
+        Set<String> existing=enchantKeys(target);
+        if(existing.contains(key) || existing.size()>=getConfig().getInt("compatibility.max-enchants-per-item",2)) return false;
+        for(String pair:getConfig().getStringList("compatibility.blocked-pairs")) {
+            String[] bits=pair.toLowerCase(Locale.ROOT).split(":");
+            if(bits.length==2 && ((bits[0].equals(key)&&existing.contains(bits[1]))||(bits[1].equals(key)&&existing.contains(bits[0])))) return false;
+        }
+        for(Map<?,?> group:getConfig().getMapList("compatibility.conflict-groups")) {
+            Object raw=group.get("enchants");
+            if(raw instanceof List<?> list && list.contains(key) && list.stream().anyMatch(v->existing.contains(String.valueOf(v)))) return false;
+        }
+        return true;
+    }
     private long cooldownLeft(UUID uuid,String key) { return Math.max(0L,procCooldowns.getOrDefault(uuid+":"+key,0L)-System.currentTimeMillis()); }
     private void updateCooldownBar(Player p) {
         if(!getConfig().getBoolean("cooldowns.actionbar.enabled",true)) return;
@@ -219,6 +258,13 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private String chanceText(Spec s) { double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
     private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
     private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;switch(key) {
+        case "moon" -> {w.spawnParticle(Particle.END_ROD,l,12,.3,.5,.3,.02);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.8f,1.8f);}
+        case "chameleon" -> {w.spawnParticle(Particle.HAPPY_VILLAGER,l,20,.4,.5,.4,.03);p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.8f,1.2f);}
+        case "berserk" -> {w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.5f,1.4f);}
+        case "godslayer","worldeater" -> {w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,30,.5,.6,.5,.04);p.playSound(l,Sound.ENTITY_WITHER_HURT,.8f,.7f);}
+        case "immortality" -> {w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08);p.playSound(l,Sound.ITEM_TOTEM_USE,1f,1f);}
+        case "creatorhand" -> {w.spawnParticle(Particle.END_ROD,l,24,.4,.5,.4,.04);p.playSound(l,Sound.BLOCK_BEACON_ACTIVATE,.8f,1.4f);}
+        case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> {w.spawnParticle(Particle.FLASH,l,1,0,0,0,0);w.spawnParticle(Particle.ENCHANT,l,28,.5,.5,.5,.6);p.playSound(l,Sound.ITEM_SHIELD_BLOCK,.9f,1.3f);}
         case "woodcutter" -> {w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f);}
         case "cleave","axemaster" -> {w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.3,.4,.3,0);p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.9f,.8f);}
         case "stun" -> {w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_ANVIL_LAND,.8f,1.5f);}
@@ -349,6 +395,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
         if(!admin) { sender.sendMessage("§cНет прав. Админ-команды доступны только операторам."); return true; }
         switch(sub) {
+            case "adminbook" -> {
+                if(args.length<3) { sender.sendMessage("§c/ve adminbook <игрок> <админское зачарование>"); return true; }
+                Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
+                if(target==null || s==null || !adminOnly(s.key())) { sender.sendMessage("§cУкажи онлайн-игрока и зачарование редкости 0."); return true; }
+                giveBook(target,s,1); sender.sendMessage("§cАдминская книга выдана "+target.getName()+".");
+            }
             case "give" -> {
                 if(args.length<3) { sender.sendMessage("§c/ve give <игрок> <чар> [уровень]"); return true; }
                 Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
@@ -411,7 +463,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args) {
         boolean admin=sender.hasPermission("voidenchants.admin");
         List<String> roots=new ArrayList<>(List.of("help","list","info","apply"));
-        if(admin) roots.addAll(List.of("give","giveall","remove","strip","book","reload","debug","drops","admin"));
+        if(admin) roots.addAll(List.of("give","giveall","remove","strip","book","adminbook","reload","debug","drops","admin"));
         if(args.length==1) return roots.stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         String sub=args[0].toLowerCase(Locale.ROOT);
         if(!admin && !List.of("info","apply","list","help").contains(sub)) return List.of();
@@ -626,6 +678,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private boolean supports(String key, Material type) {
         return switch(key) {
             case "magnet" -> type.name().endsWith("_PICKAXE")||type.name().endsWith("_SHOVEL")||type.name().endsWith("_AXE");
+            case "moon","godslayer" -> type.name().endsWith("_SWORD");
+            case "chameleon","immortality" -> type.name().endsWith("_CHESTPLATE");
+            case "berserk" -> type.name().endsWith("_AXE");
+            case "worldeater" -> type==Material.MACE;
+            case "creatorhand" -> type.name().endsWith("_PICKAXE");
+            case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> type==Material.SHIELD;
             case "drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
             case "vampirism","frost","venom","execution","phantomblade" -> type.name().endsWith("_SWORD");
             case "armorbreaker","spear_dash","hook" -> isSpear(type);
@@ -673,7 +731,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         String key=id(enchantedBook);
         Spec enchant=spec(key);
         if(target==null || target.getType()==Material.AIR || enchant==null ||
-           !supports(key,target.getType()) || hasEnchant(target,key) ||
+           !supports(key,target.getType()) || !canCombine(target,key) ||
            (target.getType()==Material.ELYTRA && (hasEnchant(target,"wings") || key.equals("wings") && !enchantKeys(target).isEmpty()))) {
             e.setResult(null);
             return;
@@ -788,10 +846,35 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         }
     }
 
+    @EventHandler(priority=EventPriority.HIGH)
+    public void onShieldBlock(EntityDamageByEntityEvent e) {
+        if(!(e.getEntity() instanceof Player defender) || !defender.isBlocking()) return;
+        ItemStack shield=defender.getInventory().getOffHand();
+        if(shield.getType()!=Material.SHIELD) shield=defender.getInventory().getItemInMainHand();
+        if(shield.getType()!=Material.SHIELD) return;
+        Set<String> ench=enchantKeys(shield); if(ench.isEmpty()) return;
+        if(ench.contains("titanshield") && ready(defender,"titanshield",configuredCooldown("titanshield",8000L))) { e.setCancelled(true); visual(defender,"titanshield",defender.getLocation()); return; }
+        if(!(e.getDamager() instanceof LivingEntity attacker)) return;
+        if(ench.contains("reflection")) { attacker.damage(e.getFinalDamage()*0.15,defender); visual(defender,"reflection",attacker.getLocation()); }
+        if(ench.contains("secondwind") && defender.getHealth()<=6.0 && ready(defender,"secondwind",30000L)) { defender.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,60,1,true,true)); visual(defender,"secondwind",defender.getLocation()); }
+        if(ench.contains("bloodsucker") && ready(defender,"bloodsucker",configuredCooldown("bloodsucker",15000L))) { int lvl=enchantLevel(shield,"bloodsucker"); defender.setHealth(Math.min(defender.getMaxHealth(),defender.getHealth()+lvl)); visual(defender,"bloodsucker",defender.getLocation()); }
+        if(ench.contains("shove") && ready(defender,"shove",configuredCooldown("shove",20000L))) { int lvl=enchantLevel(shield,"shove"); Vector knock=attacker.getLocation().toVector().subtract(defender.getLocation().toVector()).normalize().multiply(2.0+lvl*0.35); knock.setY(0.35); attacker.setVelocity(knock); visual(defender,"shove",attacker.getLocation()); }
+        if(ench.contains("lightaura") && ready(defender,"lightaura",configuredCooldown("lightaura",120000L))) {
+            for(Entity near:defender.getNearbyEntities(5,5,5)) if(near instanceof LivingEntity victim && victim!=defender) {
+                victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS,40,0,true,true));
+                victim.addPotionEffect(new PotionEffect(PotionEffectType.POISON,40,0,true,true)); victim.damage(2.0,defender);
+            }
+            visual(defender,"lightaura",defender.getLocation());
+        }
+    }
+
     @EventHandler public void onHit(EntityDamageByEntityEvent e) {
         if(!(e.getDamager() instanceof Player p)) return;
         ItemStack weapon=held(p); Set<String> keys=enchantKeys(weapon); if(keys.isEmpty())return;
         UUID uid=p.getUniqueId();
+        if(keys.contains("moon")) { long t=p.getWorld().getTime(); e.setDamage(e.getDamage()*((t>=13000 && t<=23000)?1.30:0.70)); visual(p,"moon",p.getLocation()); }
+        if(keys.contains("godslayer") && e.getEntity() instanceof Player) { e.setDamage(e.getDamage()*2.0); visual(p,"godslayer",e.getEntity().getLocation()); }
+        if(keys.contains("worldeater") && weapon.getType()==Material.MACE && p.getFallDistance()>=2.0f) { e.setDamage(e.getDamage()*2.0); p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+4.0)); visual(p,"worldeater",p.getLocation()); }
         if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30 && ready(p,"execution",5000)) { e.setDamage(e.getDamage()*2); visual(p,"execution",le.getLocation()); }
         int hit=hitCounters.merge(uid,1,Integer::sum);
         if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());}
@@ -826,6 +909,9 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
 
     @EventHandler public void onDamage(EntityDamageEvent e) {
         if(!(e.getEntity() instanceof Player p)) return;
+        if(has(p,"immortality") && e.getFinalDamage()>=p.getHealth() && ready(p,"immortality",configuredCooldown("immortality",20000L))) {
+            e.setCancelled(true); p.setHealth(2.0); p.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE,40,4,true,false)); visual(p,"immortality",p.getLocation()); return;
+        }
         if(has(p,"immunity") && Math.random()<0.20 && ready(p,"immunity",10000)) { for(PotionEffect effect:new ArrayList<>(p.getActivePotionEffects())) if(effect.getType().equals(PotionEffectType.SLOWNESS)||effect.getType().equals(PotionEffectType.WEAKNESS)||effect.getType().equals(PotionEffectType.BLINDNESS)||effect.getType().equals(PotionEffectType.POISON)||effect.getType().equals(PotionEffectType.NAUSEA)) p.removePotionEffect(effect.getType()); visual(p,"immunity",p.getLocation()); }
         int soft=equippedLevel(p,"softsteps"); if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>0) { e.setDamage(e.getDamage()*(1-0.30*soft)); if(ready(p,"softsteps",3000))visual(p,"softsteps",p.getLocation()); }
         if(e.getCause()==EntityDamageEvent.DamageCause.FALL && soft>=3)e.setDamage(0);
@@ -834,6 +920,21 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10 && ready(victim,"dragonbreath",8000)) { attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0)); visual(victim,"dragonbreath",attacker.getLocation()); }
     }
+    private boolean inWater(Player p) { return p.isInWater() || p.getLocation().getBlock().getType()==Material.WATER; }
+    private void applyChameleon(Player p) {
+        String biome=p.getLocation().getBlock().getBiome().name();
+        if(biome.contains("SNOW") || biome.contains("FROZEN") || biome.contains("ICE")) { p.setFreezeTicks(0); p.addPotionEffect(new PotionEffect(PotionEffectType.SPEED,100,0,true,false)); }
+        else if(biome.contains("DESERT") || biome.contains("BADLANDS")) { p.setFoodLevel(20); p.setSaturation(20f); p.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE,100,0,true,false)); }
+        else if(p.getWorld().getEnvironment()==World.Environment.NETHER) p.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE,100,0,true,false));
+        else if(biome.contains("FOREST") || biome.contains("TAIGA") || biome.contains("JUNGLE")) p.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION,100,0,true,false));
+    }
+    private void updateBerserk(Player p) {
+        var attr=p.getAttribute(org.bukkit.attribute.Attribute.ATTACK_SPEED); if(attr==null)return;
+        double hp=p.getHealth()/p.getMaxHealth();
+        double bonus=hp<0.10?3.2:hp<0.40?2.0:hp<0.70?0.8:0.0;
+        attr.setBaseValue(4.0+bonus);
+    }
+    private void resetBerserk(Player p) { var attr=p.getAttribute(org.bukkit.attribute.Attribute.ATTACK_SPEED); if(attr!=null && attr.getBaseValue()>4.0) attr.setBaseValue(4.0); }
     private boolean makeSurface(Player p, Material source, Material replacement, long ticks, boolean lava) {
         Block under=p.getLocation().subtract(0,1,0).getBlock(); if(under.getType()!=source)return false;
         int changed=0;
@@ -849,9 +950,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
 
     @EventHandler public void onMove(PlayerMoveEvent e) {
         Player p=e.getPlayer();
+        if(has(p,"chameleon")) applyChameleon(p);
         if(has(p,"owl")&&!p.hasPotionEffect(PotionEffectType.NIGHT_VISION)){p.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION,260,0,true,false));if(ready(p,"owl",10000))visual(p,"owl",p.getLocation());}
-        if(has(p,"fish")&&!p.hasPotionEffect(PotionEffectType.WATER_BREATHING)){p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING,260,0,true,false));if(p.isInWater()&&ready(p,"fish",8000))visual(p,"fish",p.getLocation());}
+        if(has(p,"fish") && inWater(p) && !p.hasPotionEffect(PotionEffectType.WATER_BREATHING)){p.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING,260,0,true,false));if(p.isInWater()&&ready(p,"fish",8000))visual(p,"fish",p.getLocation());}
         updateRadar(p);
+        if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);
         if(has(p,"lavawalker") && makeSurface(p,Material.LAVA,Material.OBSIDIAN,80L,true) && ready(p,"lavawalker",2500)) visual(p,"lavawalker",p.getLocation());
         if(has(p,"waterwalker") && makeSurface(p,Material.WATER,Material.BLUE_ICE,60L,false) && ready(p,"waterwalker",2500)) visual(p,"waterwalker",p.getLocation());
         if(has(p,"sneak")) {
@@ -909,7 +1012,15 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         p.setAllowFlight(false);Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);visual(p,"doublejump",p.getLocation());
     }
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
-        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); }
+        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
+        if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand") && e.getPlayer().hasPermission("voidenchants.admin")) {
+            e.setCancelled(true); Block block=e.getBlock(); block.setType(Material.AIR,false);
+            ItemStack drop=new ItemStack(Material.NETHERITE_BLOCK); ItemMeta meta=drop.getItemMeta();
+            meta.setDisplayName("§c§lБлок Творца"); meta.setLore(List.of("§7Создан зачарованием §cДлань Творца"));
+            meta.getPersistentDataContainer().set(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE,(byte)1); drop.setItemMeta(meta);
+            if(Math.random()<getConfig().getDouble("admin-enchants.creator-block-chance",0.10)) block.getWorld().dropItemNaturally(block.getLocation(),drop);
+            e.getPlayer().playSound(block.getLocation(),Sound.BLOCK_BEACON_ACTIVATE,1f,1.2f);
+        }
     }
     @EventHandler public void onInteract(PlayerInteractEvent e) {
         if(e.getHand()!=EquipmentSlot.HAND) return;
