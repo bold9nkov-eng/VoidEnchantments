@@ -363,11 +363,13 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             for(Player viewer:Bukkit.getOnlinePlayers()) {
                 Location at=viewer.getLocation();
                 viewer.playSound(at,sound,volume,pitch);
-                if(layer!=null) viewer.playSound(at,layer,volume*0.75f,pitch);\n                if(secondLayer!=null) viewer.playSound(at,secondLayer,volume*0.55f,pitch);
+                if(layer!=null) viewer.playSound(at,layer,volume*0.75f,pitch);
+                if(secondLayer!=null) viewer.playSound(at,secondLayer,volume*0.55f,pitch);
             }
         } else {
             player.playSound(location,sound,volume,pitch);
-            if(layer!=null) player.playSound(location,layer,volume*0.75f,pitch);\n            if(secondLayer!=null) player.playSound(location,secondLayer,volume*0.55f,pitch);
+            if(layer!=null) player.playSound(location,layer,volume*0.75f,pitch);
+            if(secondLayer!=null) player.playSound(location,secondLayer,volume*0.55f,pitch);
         }
     }
 
