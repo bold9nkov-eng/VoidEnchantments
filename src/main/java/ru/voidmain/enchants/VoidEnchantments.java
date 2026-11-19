@@ -321,23 +321,53 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private void playEnchantSound(Player player,String key,Location location) {
         String sound="voidmain:enchant_"+key;
+        String layer=null;
         float volume=0.8f, pitch=1.0f;
         switch(key) {
-            case "godslayer","worldeater" -> { volume=3.0f; pitch=0.78f; }
-            case "blackhole","thunder","dragonbreath","lightaura","immortality" -> { volume=1.65f; pitch=0.9f; }
-            case "moon" -> { volume=0.65f; pitch=1.0f; }
-            case "vampirism","frost","venom","magnet","softsteps","immunity" -> { volume=0.65f; pitch=1.0f; }
-            case "berserk","execution","titanshield","hook","spear_dash","bounce","doublejump" -> { volume=1.0f; pitch=0.95f; }
+            case "godslayer" -> { volume=3.0f; pitch=0.78f; layer="minecraft:block.beacon.activate"; }
+            case "worldeater" -> { volume=3.0f; pitch=0.72f; layer="minecraft:entity.ender_dragon.growl"; }
+            case "blackhole" -> { volume=1.7f; pitch=0.75f; layer="minecraft:entity.enderman.teleport"; }
+            case "thunder" -> { volume=1.8f; pitch=0.82f; layer="minecraft:entity.lightning_bolt.thunder"; }
+            case "dragonbreath" -> { volume=1.55f; pitch=0.8f; layer="minecraft:entity.ender_dragon.growl"; }
+            case "lightaura" -> { volume=1.6f; pitch=1.0f; layer="minecraft:block.beacon.activate"; }
+            case "immortality" -> { volume=1.6f; pitch=1.0f; layer="minecraft:item.totem.use"; }
+            case "moon" -> { volume=0.65f; pitch=1.0f; layer="minecraft:block.amethyst_block.chime"; }
+            case "vampirism","bloodsucker" -> { volume=0.65f; pitch=0.95f; layer="minecraft:entity.player.burp"; }
+            case "frost","waterwalker" -> { volume=0.7f; pitch=1.15f; layer="minecraft:block.glass.break"; }
+            case "venom" -> { volume=0.75f; pitch=0.9f; layer="minecraft:entity.spider.ambient"; }
+            case "berserk" -> { volume=1.0f; pitch=0.9f; layer="minecraft:entity.ravager.roar"; }
+            case "execution" -> { volume=1.0f; pitch=0.8f; layer="minecraft:block.anvil.land"; }
+            case "spear_dash","aerodynamics" -> { volume=0.85f; pitch=1.1f; layer="minecraft:entity.player.attack.sweep"; }
+            case "bounce","doublejump" -> { volume=0.9f; pitch=1.15f; layer="minecraft:entity.slime.jump"; }
+            case "hook" -> { volume=0.9f; pitch=0.95f; layer="minecraft:entity.fishing_bobber.retrieve"; }
+            case "phantomblade","shadow" -> { volume=0.85f; pitch=1.0f; layer="minecraft:entity.phantom.ambient"; }
+            case "titanshield" -> { volume=1.0f; pitch=0.8f; layer="minecraft:item.shield.block"; }
+            case "reflection" -> { volume=0.9f; pitch=1.1f; layer="minecraft:item.shield.block"; }
+            case "secondwind" -> { volume=0.85f; pitch=1.0f; layer="minecraft:entity.player.levelup"; }
+            case "softsteps","sneak" -> { volume=0.5f; pitch=0.9f; layer="minecraft:block.wool.step"; }
+            case "immunity" -> { volume=0.7f; pitch=1.0f; layer="minecraft:block.fire.extinguish"; }
+            case "chameleon" -> { volume=0.75f; pitch=1.0f; layer="minecraft:block.amethyst_block.chime"; }
+            case "lavawalker" -> { volume=0.8f; pitch=0.8f; layer="minecraft:block.lava.pop"; }
+            case "magnet","experience" -> { volume=0.7f; pitch=1.2f; layer="minecraft:entity.experience_orb.pickup"; }
+            case "woodcutter" -> { volume=0.85f; pitch=0.9f; layer="minecraft:block.wood.break"; }
+            case "drill","veinminer","haste","autosmelt" -> { volume=0.8f; pitch=0.9f; layer="minecraft:block.deepslate.break"; }
+            case "wings","hover" -> { volume=0.7f; pitch=1.0f; layer="minecraft:item.elytra.flying"; }
             default -> { volume=0.8f; pitch=1.0f; }
         }
         if(key.equals("moon") && location.getWorld()!=null) {
             long time=location.getWorld().getTime();
             sound=time>=13000L && time<=23000L?"voidmain:enchant_moon_night":"voidmain:enchant_moon_day";
+            if(time<13000L || time>23000L) layer="minecraft:block.note_block.bass";
         }
         if(key.equals("godslayer") || key.equals("worldeater")) {
-            for(Player viewer:Bukkit.getOnlinePlayers()) viewer.playSound(viewer.getLocation(),sound,volume,pitch);
+            for(Player viewer:Bukkit.getOnlinePlayers()) {
+                Location at=viewer.getLocation();
+                viewer.playSound(at,sound,volume,pitch);
+                if(layer!=null) viewer.playSound(at,layer,volume*0.75f,pitch);
+            }
         } else {
             player.playSound(location,sound,volume,pitch);
+            if(layer!=null) player.playSound(location,layer,volume*0.75f,pitch);
         }
     }
 
@@ -763,9 +793,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(!(e.getWhoClicked() instanceof Player p)) return;
         ItemStack left=e.getView().getTopInventory().getItem(0);
         ItemStack right=e.getView().getTopInventory().getItem(1);
-        if(id(left)!=null || id(right)!=null)
-            p.playSound(p.getLocation(),Sound.BLOCK_ENCHANTMENT_TABLE_USE,0.9f,1.0f);
-            p.playSound(p.getLocation(),Sound.BLOCK_AMETHYST_BLOCK_CHIME,0.7f,1.5f);
+        if(id(left)==null && id(right)==null) return;
+        ItemStack result=e.getView().getTopInventory().getItem(2);
+        if(result!=null && result.getType()!=Material.AIR && id(result)!=null) {
+            p.playSound(p.getLocation(),"voidmain:enchant_apply",0.9f,1.0f);
+            p.playSound(p.getLocation(),"minecraft:block.amethyst_block.chime",0.5f,1.3f);
+        } else {
+            p.playSound(p.getLocation(),"voidmain:enchant_fail",0.9f,0.9f);
+            p.playSound(p.getLocation(),"minecraft:entity.villager.no",0.55f,0.85f);
+        }
     }
 
     private void immobilize(LivingEntity target) { immobilize(target,40L); }
