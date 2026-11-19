@@ -402,6 +402,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); playEnchantSound(p,key,l); }
         }
         if(Set.of("vampirism","bloodsucker","frost","venom","execution","thunder","dragonbreath","berserk","godslayer","worldeater","blackhole","phantomblade","shadow","immortality","reflection","secondwind","unbreakable","lightaura","titanshield").contains(key)) animateCombatEffect(p,key,l);
+        if(Set.of("blackhole","frost","venom","vampirism","bloodsucker","thunder","execution","berserk","godslayer","worldeater","immortality","reflection","secondwind","unbreakable","lightaura","titanshield","phantomblade","shadow").contains(key)) spawnVoxelScene(key,l);
         Color signature = switch(key) {
             case "venom","immunity" -> Color.fromRGB(93,220,104);
             case "execution" -> Color.fromRGB(255,126,48);
@@ -993,6 +994,100 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
         world.spawnParticle(Particle.REVERSE_PORTAL,center,22,0.42,0.42,0.42,0.08);
     }
+
+    // Короткие 3D-сценки из настоящих BlockDisplay: это объекты мира, а не плоские частицы.
+    private void spawnVoxelScene(String key, Location origin) {
+        World world=origin.getWorld(); if(world==null || !world.isChunkLoaded(origin.getBlockX()>>4,origin.getBlockZ()>>4)) return;
+        Material[] palette=switch(key) {
+            case "blackhole" -> new Material[]{Material.CRYING_OBSIDIAN,Material.PURPLE_STAINED_GLASS,Material.AMETHYST_BLOCK,Material.OBSIDIAN};
+            case "frost" -> new Material[]{Material.PACKED_ICE,Material.BLUE_ICE,Material.ICE,Material.LIGHT_BLUE_STAINED_GLASS};
+            case "godslayer" -> new Material[]{Material.GOLD_BLOCK,Material.GILDED_BLACKSTONE,Material.QUARTZ_BLOCK,Material.YELLOW_STAINED_GLASS};
+            case "worldeater" -> new Material[]{Material.OBSIDIAN,Material.CRYING_OBSIDIAN,Material.PURPLE_STAINED_GLASS,Material.AMETHYST_BLOCK};
+            case "venom" -> new Material[]{Material.EMERALD_BLOCK,Material.SLIME_BLOCK,Material.LIME_STAINED_GLASS,Material.MOSS_BLOCK};
+            case "vampirism","bloodsucker" -> new Material[]{Material.REDSTONE_BLOCK,Material.REDSTONE_LAMP,Material.RED_STAINED_GLASS,Material.NETHER_WART_BLOCK};
+            case "thunder" -> new Material[]{Material.LIGHTNING_ROD,Material.COPPER_BLOCK,Material.GOLD_BLOCK,Material.YELLOW_STAINED_GLASS};
+            case "execution","berserk" -> new Material[]{Material.RED_NETHER_BRICKS,Material.REDSTONE_BLOCK,Material.NETHERITE_BLOCK,Material.RED_STAINED_GLASS};
+            case "reflection","titanshield","unbreakable" -> new Material[]{Material.IRON_BLOCK,Material.CYAN_STAINED_GLASS,Material.PRISMARINE_BRICKS,Material.DIAMOND_BLOCK};
+            case "secondwind" -> new Material[]{Material.SEA_LANTERN,Material.EMERALD_BLOCK,Material.LIGHT_BLUE_STAINED_GLASS,Material.GLOWSTONE};
+            case "immortality","lightaura" -> new Material[]{Material.GOLD_BLOCK,Material.SEA_LANTERN,Material.QUARTZ_BLOCK,Material.YELLOW_STAINED_GLASS};
+            case "phantomblade","shadow" -> new Material[]{Material.CRYING_OBSIDIAN,Material.BLACKSTONE,Material.PURPLE_STAINED_GLASS,Material.OBSIDIAN};
+            default -> new Material[]{Material.AMETHYST_BLOCK,Material.PURPLE_STAINED_GLASS,Material.QUARTZ_BLOCK,Material.CRYING_OBSIDIAN};
+        };
+        final List<BlockDisplay> parts=new ArrayList<>();
+        final Location base=origin.clone().add(0,0.15,0);
+        final int count=key.equals("blackhole")||key.equals("worldeater")?9:7;
+        for(int i=0;i<count;i++) {
+            Location at=base.clone().add(0,0.8,0);
+            BlockDisplay display=world.spawn(at,BlockDisplay.class,entity->{
+                entity.setBlock(palette[iSafe(i,palette.length)].createBlockData());
+                entity.setPersistent(false);
+                entity.setInvulnerable(true);
+                entity.setGravity(false);
+                entity.setShadowRadius(0.0f);
+                entity.setViewRange(0.8f);
+                float size=(i==0?0.58f:0.27f);
+                entity.setTransformation(new org.bukkit.util.Transformation(
+                    new org.joml.Vector3f(-size/2f,-size/2f,-size/2f),
+                    new org.joml.AxisAngle4f(0,0,1,0),
+                    new org.joml.Vector3f(size,size,size),
+                    new org.joml.AxisAngle4f(0,0,1,0)));
+            });
+            parts.add(display);
+        }
+        new BukkitRunnable() {
+            int tick=0;
+            @Override public void run() {
+                if(tick>=18 || !origin.isWorldLoaded()) { parts.forEach(Entity::remove); cancel(); return; }
+                double progress=tick/17.0;
+                double spin=tick*0.22;
+                for(int i=0;i<parts.size();i++) {
+                    BlockDisplay d=parts.get(i);
+                    if(!d.isValid()) continue;
+                    Location pos=base.clone();
+                    double scale;
+                    if(i==0) {
+                        pos.add(0,0.85+Math.sin(tick*0.34)*0.08,0);
+                        scale=(float)(0.72*(1.0-progress*0.42));
+                    } else if(key.equals("blackhole")||key.equals("worldeater")) {
+                        // Восемь кубов образуют вращающуюся объёмную рамку.
+                        int corner=i-1;
+                        double x=(corner&1)==0?-1:1, y=(corner&2)==0?-1:1, z=(corner&4)==0?-1:1;
+                        double a=spin*(key.equals("blackhole")?1.0:0.72);
+                        double rx=x*Math.cos(a)-z*Math.sin(a), rz=x*Math.sin(a)+z*Math.cos(a);
+                        double radius=0.82*(1.0-progress*0.30);
+                        pos.add(rx*radius,y*radius+0.85,rz*radius);
+                        scale=(float)(0.34*(1.0-progress*0.35));
+                    } else {
+                        double a=spin+i*Math.PI*2.0/(parts.size()-1);
+                        double radius=0.62*(1.0-progress*0.25);
+                        pos.add(Math.cos(a)*radius,0.82+Math.sin(tick*0.28+i)*0.13,Math.sin(a)*radius);
+                        scale=(float)(0.34*(1.0-progress*0.30));
+                    }
+                    d.teleport(pos);
+                    d.setTransformation(new org.bukkit.util.Transformation(
+                        new org.joml.Vector3f(-scale/2f,-scale/2f,-scale/2f),
+                        new org.joml.AxisAngle4f((float)(spin+i*0.4),0.35f,1.0f,0.2f),
+                        new org.joml.Vector3f(scale,scale,scale),
+                        new org.joml.AxisAngle4f(0,0,1,0)));
+                }
+                if(tick%3==0) {
+                    Color tint=switch(key) {
+                        case "frost" -> Color.fromRGB(125,215,255);
+                        case "venom" -> Color.fromRGB(80,225,95);
+                        case "vampirism","bloodsucker","berserk","execution" -> Color.fromRGB(215,35,55);
+                        case "godslayer","immortality","lightaura" -> Color.fromRGB(255,205,75);
+                        case "reflection","titanshield","unbreakable" -> Color.fromRGB(115,225,235);
+                        case "secondwind" -> Color.fromRGB(110,255,190);
+                        default -> Color.fromRGB(150,70,235);
+                    };
+                    world.spawnParticle(Particle.DUST,base.clone().add(0,0.9,0),5,0.34,0.38,0.34,0,new Particle.DustOptions(tint,1.15f));
+                }
+                tick++;
+            }
+        }.runTaskTimer(this,0L,1L);
+    }
+    private int iSafe(int index,int length) { return Math.floorMod(index,length); }
+
     private byte entityFlags(Entity entity, boolean glowing) {
         int flags=0;
         if(entity instanceof LivingEntity burning && burning.getFireTicks()>0)flags|=0x01;
