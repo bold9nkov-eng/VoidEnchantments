@@ -282,7 +282,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private String chanceText(Spec s) { if(rarityTier(s)==0) return "только админам"; double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
     private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
     private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;
-        p.playSound(l,"voidmain:enchant/"+key,SoundCategory.PLAYERS,0.65f,1.0f);
+        String customSound=key.equals("berserk")?"voidmain:hit_magic":"voidmain:enchant/"+key;
+        p.playSound(l,customSound,SoundCategory.PLAYERS,0.65f,1.0f);
         switch(key) {
         case "moon" -> {w.spawnParticle(Particle.END_ROD,l,12,.3,.5,.3,.02);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.8f,1.8f);}
         case "chameleon" -> {w.spawnParticle(Particle.HAPPY_VILLAGER,l,20,.4,.5,.4,.03);p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.8f,1.2f);}
