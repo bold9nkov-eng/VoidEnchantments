@@ -321,56 +321,40 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }.runTaskTimer(this,0L,1L);
     }
     private void playEnchantSound(Player player,String key,Location location) {
-        String sound="voidmain:enchant_"+key;
-        String layer=null, secondLayer=null;
-        float volume=0.8f, pitch=1.0f;
+        if(location.getWorld()==null) return;
+        String first="minecraft:block.amethyst_block.chime";
+        String second=null;
+        float volume=0.85f, pitch=1.0f;
         switch(key) {
-            case "godslayer" -> { volume=3.0f; pitch=0.78f; layer="minecraft:block.beacon.activate"; secondLayer="minecraft:entity.elder_guardian.curse"; }
-            case "worldeater" -> { volume=3.0f; pitch=0.72f; layer="minecraft:entity.ender_dragon.growl"; secondLayer="minecraft:entity.wither.spawn"; }
-            case "blackhole" -> { volume=1.7f; pitch=0.75f; layer="minecraft:entity.enderman.teleport"; secondLayer="minecraft:block.end_portal.spawn"; }
-            case "thunder" -> { volume=1.8f; pitch=0.82f; layer="minecraft:entity.lightning_bolt.thunder"; secondLayer="minecraft:entity.lightning_bolt.impact"; }
-            case "dragonbreath" -> { volume=1.55f; pitch=0.8f; layer="minecraft:entity.ender_dragon.growl"; }
-            case "lightaura" -> { volume=1.6f; pitch=1.0f; layer="minecraft:block.beacon.activate"; }
-            case "immortality" -> { volume=1.6f; pitch=1.0f; layer="minecraft:item.totem.use"; }
-            case "moon" -> { volume=0.65f; pitch=1.0f; layer="minecraft:block.amethyst_block.chime"; }
-            case "vampirism","bloodsucker" -> { volume=0.65f; pitch=0.95f; layer="minecraft:entity.player.burp"; secondLayer="minecraft:entity.warden.heartbeat"; }
-            case "frost","waterwalker" -> { volume=0.7f; pitch=1.15f; layer="minecraft:block.glass.break"; secondLayer="minecraft:block.amethyst_block.chime"; }
-            case "venom" -> { volume=0.75f; pitch=0.9f; layer="minecraft:entity.spider.ambient"; secondLayer="minecraft:block.pointed_dripstone.drip_lava"; }
-            case "berserk" -> { volume=1.0f; pitch=0.9f; layer="minecraft:entity.ravager.roar"; }
-            case "execution" -> { volume=1.0f; pitch=0.8f; layer="minecraft:block.anvil.land"; secondLayer="minecraft:item.trident.hit"; }
-            case "spear_dash","aerodynamics" -> { volume=0.85f; pitch=1.1f; layer="minecraft:entity.player.attack.sweep"; }
-            case "bounce","doublejump" -> { volume=0.9f; pitch=1.15f; layer="minecraft:entity.slime.jump"; secondLayer="minecraft:block.slime_block.fall"; }
-            case "hook" -> { volume=0.9f; pitch=0.95f; layer="minecraft:entity.fishing_bobber.retrieve"; secondLayer="minecraft:entity.arrow.shoot"; }
-            case "phantomblade","shadow" -> { volume=0.85f; pitch=1.0f; layer="minecraft:entity.phantom.ambient"; }
-            case "titanshield" -> { volume=1.0f; pitch=0.8f; layer="minecraft:item.shield.block"; }
-            case "reflection" -> { volume=0.9f; pitch=1.1f; layer="minecraft:item.shield.block"; }
-            case "secondwind" -> { volume=0.85f; pitch=1.0f; layer="minecraft:entity.player.levelup"; }
-            case "softsteps","sneak" -> { volume=0.5f; pitch=0.9f; layer="minecraft:block.wool.step"; }
-            case "immunity" -> { volume=0.7f; pitch=1.0f; layer="minecraft:block.fire.extinguish"; }
-            case "lavawalker" -> { volume=0.8f; pitch=0.8f; layer="minecraft:block.lava.pop"; }
-            case "magnet","experience" -> { volume=0.7f; pitch=1.2f; layer="minecraft:entity.experience_orb.pickup"; }
-            case "woodcutter" -> { volume=0.85f; pitch=0.9f; layer="minecraft:block.wood.break"; }
-            case "drill","veinminer","haste","autosmelt" -> { volume=0.8f; pitch=0.9f; layer="minecraft:block.deepslate.break"; }
-            case "wings","hover" -> { volume=0.7f; pitch=1.0f; layer="minecraft:item.elytra.flying"; secondLayer="minecraft:entity.phantom.flap"; }
-            default -> { volume=0.8f; pitch=1.0f; }
+            case "godslayer" -> { first="minecraft:block.beacon.activate"; second="minecraft:entity.elder_guardian.curse"; volume=1.15f; pitch=0.72f; }
+            case "worldeater" -> { first="minecraft:entity.warden.sonic_boom"; second="minecraft:entity.ender_dragon.growl"; volume=1.35f; pitch=0.65f; }
+            case "blackhole" -> { first="minecraft:block.end_portal.spawn"; second="minecraft:entity.enderman.teleport"; volume=0.95f; pitch=0.72f; }
+            case "thunder" -> { first="minecraft:entity.lightning_bolt.impact"; second="minecraft:entity.lightning_bolt.thunder"; volume=1.0f; pitch=0.88f; }
+            case "dragonbreath" -> { first="minecraft:entity.ender_dragon.flap"; second="minecraft:entity.blaze.shoot"; pitch=0.78f; }
+            case "lightaura","immortality" -> { first="minecraft:block.beacon.power_select"; second="minecraft:item.totem.use"; volume=0.9f; pitch=1.08f; }
+            case "moon" -> { first="minecraft:block.amethyst_block.chime"; second="minecraft:block.note_block.bell"; pitch=1.35f; }
+            case "vampirism","bloodsucker" -> { first="minecraft:entity.warden.heartbeat"; second="minecraft:entity.player.attack.crit"; pitch=0.82f; }
+            case "frost","waterwalker" -> { first="minecraft:block.glass.break"; second="minecraft:block.amethyst_block.chime"; pitch=1.28f; }
+            case "venom" -> { first="minecraft:entity.spider.ambient"; second="minecraft:block.pointed_dripstone.drip_lava"; pitch=0.92f; }
+            case "berserk" -> { first="minecraft:entity.ravager.roar"; second="minecraft:entity.player.attack.knockback"; pitch=0.82f; }
+            case "execution" -> { first="minecraft:block.anvil.land"; second="minecraft:item.trident.hit"; pitch=0.78f; }
+            case "spear_dash","aerodynamics" -> { first="minecraft:entity.player.attack.sweep"; second="minecraft:entity.ender_dragon.flap"; pitch=1.18f; }
+            case "bounce","doublejump" -> { first="minecraft:entity.slime.jump"; second="minecraft:block.slime_block.fall"; pitch=1.22f; }
+            case "hook" -> { first="minecraft:entity.fishing_bobber.retrieve"; second="minecraft:entity.arrow.shoot"; pitch=1.08f; }
+            case "phantomblade","shadow" -> { first="minecraft:entity.phantom.ambient"; second="minecraft:entity.enderman.teleport"; pitch=0.92f; }
+            case "titanshield","reflection" -> { first="minecraft:item.shield.block"; second="minecraft:block.anvil.land"; pitch=0.82f; }
+            case "secondwind" -> { first="minecraft:entity.player.levelup"; second="minecraft:block.beacon.power_select"; pitch=1.12f; }
+            case "softsteps","sneak" -> { first="minecraft:block.wool.step"; second="minecraft:block.amethyst_block.chime"; volume=0.55f; pitch=1.25f; }
+            case "immunity" -> { first="minecraft:block.fire.extinguish"; second="minecraft:entity.experience_orb.pickup"; pitch=1.18f; }
+            case "lavawalker" -> { first="minecraft:block.lava.pop"; second="minecraft:block.basalt.break"; pitch=0.82f; }
+            case "magnet","experience" -> { first="minecraft:entity.experience_orb.pickup"; second="minecraft:block.amethyst_block.chime"; pitch=1.35f; }
+            case "woodcutter" -> { first="minecraft:block.wood.break"; second="minecraft:block.wood.hit"; pitch=0.9f; }
+            case "drill","veinminer","haste","autosmelt" -> { first="minecraft:block.deepslate.break"; second="minecraft:block.anvil.use"; pitch=0.88f; }
+            case "wings","hover" -> { first="minecraft:item.elytra.flying"; second="minecraft:entity.phantom.flap"; pitch=1.12f; }
+            default -> { first="minecraft:block.amethyst_block.chime"; pitch=1.0f; }
         }
-        if(key.equals("moon") && location.getWorld()!=null) {
-            long time=location.getWorld().getTime();
-            sound=time>=13000L && time<=23000L?"voidmain:enchant_moon_night":"voidmain:enchant_moon_day";
-            if(time<13000L || time>23000L) layer="minecraft:block.note_block.bass";
-        }
-        if(key.equals("godslayer") || key.equals("worldeater")) {
-            for(Player viewer:Bukkit.getOnlinePlayers()) {
-                Location at=viewer.getLocation();
-                viewer.playSound(at,sound,volume,pitch);
-                if(layer!=null) viewer.playSound(at,layer,volume*0.75f,pitch);
-                if(secondLayer!=null) viewer.playSound(at,secondLayer,volume*0.55f,pitch);
-            }
-        } else {
-            player.playSound(location,sound,volume,pitch);
-            if(layer!=null) player.playSound(location,layer,volume*0.75f,pitch);
-            if(secondLayer!=null) player.playSound(location,secondLayer,volume*0.55f,pitch);
-        }
+        player.playSound(location,first,volume,pitch);
+        if(second!=null) player.playSound(location,second,volume*0.48f,Math.min(2.0f,pitch*1.12f));
     }
 
     private void visual(Player p,String key,Location l) {
@@ -676,19 +660,18 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Integer value=marker.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
         return value==null?0:value;
     }
-    private void fillGalaxy(Inventory inv) {
+    private void fillMenuFrame(Inventory inv) {
         for(int slot=0;slot<inv.getSize();slot++) {
-            ItemStack tile=new ItemStack(Material.PURPLE_STAINED_GLASS_PANE);
+            ItemStack tile=new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
             ItemMeta meta=tile.getItemMeta();
             meta.setDisplayName("§0 ");
-            meta.setItemModel(NamespacedKey.fromString("voidmain:gui_galaxy_tile_"+slot));
             tile.setItemMeta(meta);
             inv.setItem(slot,tile);
         }
     }
     private void openCategories(Player p) {
         Inventory inv=Bukkit.createInventory(null,54,CATEGORY_TITLE);
-        fillGalaxy(inv);
+        fillMenuFrame(inv);
         int[] slots={10,12,14,19,21,23,28,30,32};
         for(int i=0;i<categories.size();i++) {
             Category category=categories.get(i);
@@ -729,7 +712,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         int maxPage=Math.max(0,(visible.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
         Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
-        fillGalaxy(inv);
+        fillMenuFrame(inv);
         int start=page*pageSize;
         for(int i=0;i<pageSize && start+i<visible.size();i++) {
             Spec spec=visible.get(start+i);
@@ -892,12 +875,55 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
     }
 
+    private final Map<UUID,Float> frozenWalkSpeeds=new HashMap<>();
+    private final Map<UUID,Integer> frozenPlayerTasks=new HashMap<>();
     private void immobilize(LivingEntity target) { immobilize(target,40L); }
     private void immobilize(LivingEntity target,long ticks) {
-        if(target instanceof Player victim) { float old=victim.getWalkSpeed(); victim.setWalkSpeed(0f); victim.setVelocity(new Vector(0,0,0)); Bukkit.getScheduler().runTaskLater(this,()->{if(victim.isOnline())victim.setWalkSpeed(old);},ticks); }
-        else if(target instanceof Mob mob) { boolean old=mob.hasAI(); mob.setAI(false); Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},ticks); }
-        else { target.setVelocity(new Vector(0,0,0)); target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false)); }
-        target.getWorld().spawnParticle(Particle.PORTAL,target.getLocation().add(0,1,0),35,0.5,0.7,0.5,0.15);
+        Location center=target.getLocation().add(0,0.9,0);
+        if(target instanceof Player victim) {
+            UUID id=victim.getUniqueId();
+            Integer previous=frozenPlayerTasks.remove(id);
+            if(previous!=null) Bukkit.getScheduler().cancelTask(previous);
+            frozenWalkSpeeds.putIfAbsent(id,victim.getWalkSpeed());
+            victim.setWalkSpeed(0f);
+            victim.setVelocity(new Vector(0,0,0));
+            victim.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false),true);
+            victim.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST,(int)ticks,128,true,false),true);
+            int task=Bukkit.getScheduler().scheduleSyncDelayedTask(this,()->{
+                if(victim.isOnline()) {
+                    victim.setWalkSpeed(frozenWalkSpeeds.getOrDefault(id,0.2f));
+                    victim.removePotionEffect(PotionEffectType.SLOWNESS);
+                    victim.removePotionEffect(PotionEffectType.JUMP_BOOST);
+                    victim.setVelocity(new Vector(0,0,0));
+                }
+                frozenWalkSpeeds.remove(id);
+                frozenPlayerTasks.remove(id);
+            },ticks);
+            frozenPlayerTasks.put(id,task);
+        } else if(target instanceof Mob mob) {
+            boolean old=mob.hasAI(); mob.setAI(false); mob.setVelocity(new Vector(0,0,0));
+            Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},ticks);
+        } else {
+            target.setVelocity(new Vector(0,0,0));
+            target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false),true);
+        }
+        target.getWorld().spawnParticle(Particle.PORTAL,center,42,0.45,0.55,0.45,0.12);
+        target.getWorld().spawnParticle(Particle.DUST,center,18,0.35,0.45,0.35,0,new Particle.DustOptions(Color.fromRGB(86,24,145),1.25f));
+        spawnBlackHoleCube(center);
+    }
+    private void spawnBlackHoleCube(Location center) {
+        World world=center.getWorld(); if(world==null)return;
+        Color edge=Color.fromRGB(104,42,174);
+        double half=0.92;
+        for(int step=0;step<=8;step++) {
+            double t=-half+(2*half*step/8.0);
+            for(int a=-1;a<=1;a+=2) for(int b=-1;b<=1;b+=2) {
+                world.spawnParticle(Particle.DUST,center.clone().add(t,a*half,b*half),1,0,0,0,0,new Particle.DustOptions(edge,1.35f));
+                world.spawnParticle(Particle.DUST,center.clone().add(a*half,t,b*half),1,0,0,0,0,new Particle.DustOptions(edge,1.35f));
+                world.spawnParticle(Particle.DUST,center.clone().add(a*half,b*half,t),1,0,0,0,0,new Particle.DustOptions(edge,1.35f));
+            }
+        }
+        world.spawnParticle(Particle.REVERSE_PORTAL,center,22,0.42,0.42,0.42,0.08);
     }
     private byte entityFlags(Entity entity, boolean glowing) {
         int flags=0;
