@@ -24,6 +24,6 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: VoidEnchantments-3.0.0
-          path: target/VoidEnchantments-2.1.2.jar
+          path: target/VoidEnchantments-3.0.0.jar
           if-no-files-found: error
           retention-days: 30
