@@ -1,4 +1,4 @@
-# VoidEnchantments 2.1.0 — Paper 1.21.11 / Java 21
+# VoidEnchantments 3.1.0 — Paper 1.21.11 / Java 21
 # Шансы в drop-chance — веса. Реальный шанс каждого чара рассчитывается
 # относительно суммы весов всех включённых чар (админские чары исключены).
 disabled-enchants: []
@@ -38,6 +38,7 @@ cooldowns:
     interval-ticks: 5
     separator: " §8| "
     format: "§d{enchant}: §f{seconds}с"
+  max-visible: 2
   seconds:
     hook: 8
     bounce: 12
@@ -129,8 +130,6 @@ drop-chance:
 admin-enchants:
   require-permission: "voidenchants.admin"
   obtainable-from-drops: false
-  creator-block-chance: 0.10
-  creator-blocks: []
 # Настройки каждого зачарования. Можно менять имя, описание, максимальный уровень и редкость.
 # rarity-tier: 0=админское, 1=божественное, 2=легендарное, 3=эпическое, 4=редкое, 5=необычное
 enchantments:
@@ -357,11 +356,6 @@ enchantments:
   immortality:
     name: "Бессмертие"
     description: "Смертельный удар оставляет 1 сердце; защита 2 секунды"
-    max-level: 1
-    rarity-tier: 0
-  creatorhand:
-    name: "Длань Творца"
-    description: "Позволяет разрушать бедрок и барьеры"
     max-level: 1
     rarity-tier: 0
   reflection:
