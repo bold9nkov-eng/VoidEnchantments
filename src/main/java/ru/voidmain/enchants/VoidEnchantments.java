@@ -452,7 +452,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                     }
                     case "frost" -> {
                         for(int n=0;n<8;n++){double a=Math.PI*2*n/8+tick*.18;world.spawnParticle(Particle.SNOWFLAKE,c.clone().add(Math.cos(a)*radius,0,Math.sin(a)*radius),1,0,0,0,0);}
-                        if(tick==5)world.spawnParticle(Particle.ITEM_CRACK,c,18,.35,.35,.35,.08,new ItemStack(Material.ICE));
+                        if(tick==5)world.spawnParticle(Particle.BLOCK,c,18,.35,.35,.35,.08,Material.ICE.createBlockData());
                     }
                     case "venom" -> {
                         world.spawnParticle(Particle.SPORE_BLOSSOM_AIR,c,5,.24,.18,.24,.005);
