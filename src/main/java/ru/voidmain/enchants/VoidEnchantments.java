@@ -44,6 +44,9 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Long> doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<String,Long> procCooldowns=new HashMap<>();
     private final Map<String,Long> procCooldownDurations=new HashMap<>();
+    private final Map<UUID, Deque<String>> activationHistory = new HashMap<>();
+    private final Map<UUID, Boolean> effectsEnabled = new HashMap<>();
+    private final Map<UUID, Map<String,Integer>> awakeningCounts = new HashMap<>();
     private final Set<String> cooldownHudKeys=Set.of("hook","bounce","doublejump","immortality","titanshield","bloodsucker","shove","lightaura","secondwind");
     private final Map<UUID,Integer> shieldAxeHits=new HashMap<>();
     private final Set<UUID> treeBreaking=new HashSet<>();
@@ -192,6 +195,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "wings","execution" -> 1;
         case "drill","vampirism","sniper" -> 2;
         case "veinminer","hover","lavawalker","dragonbreath" -> 3;
+        case "diver" -> 3;
         case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
         default -> 5;
     }; return Math.max(0,Math.min(5,getConfig().getInt("enchantments."+s.key()+".rarity-tier",fallback))); }
@@ -298,24 +302,36 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             world.spawnParticle(Particle.DUST,center.clone().add(Math.cos(angle)*radius,.12,Math.sin(angle)*radius),1,.01,.01,.01,0,dust);
         }
     }
-    private void spawnBloodDrips(Player player) {
-        Particle.DustOptions blood=new Particle.DustOptions(Color.fromRGB(156,8,31),1.05f);
+    private void spawnBloodDrips(LivingEntity entity) {
+        Particle.DustOptions blood=new Particle.DustOptions(Color.fromRGB(156,8,31),1.15f);
         new BukkitRunnable() {
             int frame=0;
             @Override public void run() {
-                if(!player.isOnline() || frame>=9) { cancel(); return; }
-                Location origin=player.getLocation();
-                for(int i=0;i<3;i++) {
-                    double angle=frame*.62+i*Math.PI*2/3;
-                    Location drop=origin.clone().add(Math.cos(angle)*.23,1.52-frame*.145,Math.sin(angle)*.23);
-                    player.getWorld().spawnParticle(Particle.DUST,drop,1,.008,.012,.008,0,blood);
+                if(!entity.isValid() || frame>=10) { cancel(); return; }
+                Location origin=entity.getLocation();
+                for(int i=0;i<4;i++) {
+                    double angle=frame*.62+i*Math.PI*2/4;
+                    Location drop=origin.clone().add(Math.cos(angle)*.27,1.62-frame*.15,Math.sin(angle)*.27);
+                    entity.getWorld().spawnParticle(Particle.DUST,drop,1,.006,.018,.006,0,blood);
                 }
+                entity.getWorld().spawnParticle(Particle.DUST,origin.clone().add(0,.18,0),2,.18,.02,.18,0,blood);
                 frame++;
             }
         }.runTaskTimer(this,0L,1L);
     }
     private void visual(Player p,String key,Location l) {
         World w=l.getWorld(); if(w==null)return;
+        Spec activated=spec(key);
+        Deque<String> history=activationHistory.computeIfAbsent(p.getUniqueId(),u->new ArrayDeque<>());
+        history.addFirst("§7"+new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date())+" §8• §d"+(activated==null?key:specName(activated)));
+        while(history.size()>10) history.removeLast();
+        if(!effectsEnabled.getOrDefault(p.getUniqueId(),true)) return;
+        int uses=awakeningCounts.computeIfAbsent(p.getUniqueId(),u->new HashMap<>()).merge(key,1,Integer::sum);
+        if(uses==50 || uses==150 || uses==300) {
+            String rank=uses==50?"I":uses==150?"II":"III";
+            p.sendTitle("§5✦ §dПробуждение "+rank,"§f"+(activated==null?key:specName(activated))+" §8• §7"+uses+" активаций",8,45,15);
+            p.playSound(p.getLocation(),Sound.BLOCK_RESPAWN_ANCHOR_CHARGE,.55f,.75f);
+        }
         switch(key) {
             case "moon" -> { w.spawnParticle(Particle.END_ROD,l,18,.35,.55,.35,.025); spawnVoidRing(l,.8,Color.fromRGB(222,224,255),24); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.75f,.75f); }
             case "chameleon" -> { w.spawnParticle(Particle.HAPPY_VILLAGER,l,16,.4,.5,.4,.025); w.spawnParticle(Particle.DUST,l,12,.35,.45,.35,0,new Particle.DustOptions(Color.fromRGB(150,93,255),1.1f)); p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.75f,.85f); }
@@ -338,8 +354,13 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "phantomblade","shadow" -> { w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03); w.spawnParticle(Particle.REVERSE_PORTAL,l,12,.25,.35,.25,.08); p.playSound(l,Sound.ENTITY_ENDERMAN_TELEPORT,.65f,1.0f); }
             case "frost" -> { w.spawnParticle(Particle.SNOWFLAKE,l,26,.3,.5,.3,.04); spawnVoidRing(l,.7,Color.fromRGB(158,222,255),22); p.playSound(l,Sound.BLOCK_GLASS_BREAK,.7f,1.0f); }
             case "venom","immunity" -> { w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02); w.spawnParticle(Particle.DUST,l,12,.3,.45,.3,0,new Particle.DustOptions(Color.fromRGB(85,194,93),1.0f)); p.playSound(l,Sound.ENTITY_WITCH_AMBIENT,.6f,.9f); }
-            case "dragonbreath" -> { w.spawnParticle(Particle.DRAGON_BREATH,l,24,.4,.5,.4,.02); w.spawnParticle(Particle.FLAME,l,10,.3,.3,.3,.02); p.playSound(l,Sound.ENTITY_ENDER_DRAGON_GROWL,.5f,.8f); }
-            case "vampirism" -> { w.spawnParticle(Particle.HEART,l,5,.22,.35,.22,.01); w.spawnParticle(Particle.DUST,l,18,.35,.5,.35,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.1f)); spawnVoidRing(l,.55,Color.fromRGB(154,5,28),18); p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.5f,.85f); }
+            case "dragonbreath" -> { w.spawnParticle(Particle.DRAGON_BREATH,l,34,.4,.5,.4,.025); w.spawnParticle(Particle.FLAME,l,12,.3,.3,.3,.015); p.playSound(l,Sound.ENTITY_ENDER_DRAGON_GROWL,.38f,.72f); }
+            case "sniper","armorbreaker","execution" -> { w.spawnParticle(Particle.CRIT,l,24,.35,.5,.35,.08); w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.2,.25,.2,0); p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.8f,.72f); }
+            case "radar","owl","wisdom" -> { w.spawnParticle(Particle.END_ROD,l,14,.3,.55,.3,.015); w.spawnParticle(Particle.ENCHANT,l,18,.35,.5,.35,.25); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_RESONATE,.65f,.7f); }
+            case "softsteps","sneak" -> { w.spawnParticle(Particle.CLOUD,l,12,.25,.08,.25,.01); w.spawnParticle(Particle.DUST,l,8,.25,.1,.25,0,new Particle.DustOptions(Color.fromRGB(181,159,220),.8f)); p.playSound(l,Sound.BLOCK_WOOL_STEP,.5f,.7f); }
+            case "haste","experience","autosmelt","veinminer","drill" -> { w.spawnParticle(Particle.BLOCK,l,22,.35,.45,.35,.1,Material.DEEPSLATE.createBlockData()); w.spawnParticle(Particle.CRIT,l,8,.2,.25,.2,.04); p.playSound(l,Sound.BLOCK_DEEPSLATE_BREAK,.65f,.8f); }
+            case "spear_dash","doublejump","wings","hover","aerodynamics" -> { w.spawnParticle(Particle.CLOUD,l,24,.35,.25,.35,.045); w.spawnParticle(Particle.END_ROD,l,14,.3,.35,.3,.02); p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.65f,.75f); }
+            case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.72f,.72f); }
             default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.6f,1.0f); }
         }
     }
@@ -446,8 +467,19 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             Spec s=findSpec(args[1]); if(s==null) sender.sendMessage("§cТакое зачарование не найдено."); else sendSpecInfo(sender,s);
             return true;
         }
+        if(sub.equals("effects")) {
+            if(!(sender instanceof Player p)) { sender.sendMessage("§cКоманда только для игрока."); return true; }
+            boolean enabled=!effectsEnabled.getOrDefault(p.getUniqueId(),true); effectsEnabled.put(p.getUniqueId(),enabled);
+            p.sendMessage(enabled?"§5✦ §dЭффекты зачарований включены.":"§8✦ §7Частицы и звуки зачарований отключены."); return true;
+        }
+        if(sub.equals("history")) {
+            if(!(sender instanceof Player p)) { sender.sendMessage("§cКоманда только для игрока."); return true; }
+            Deque<String> entries=activationHistory.getOrDefault(p.getUniqueId(),new ArrayDeque<>());
+            p.sendMessage("§5§lVoidMain §8| §dПоследние срабатывания");
+            if(entries.isEmpty()) p.sendMessage("§7Пока нет записей."); else entries.forEach(p::sendMessage); return true;
+        }
         if(sub.equals("apply")) {
-            sender.sendMessage("§d✦ §fКак применить кастомное зачарование:");
+            sender.sendMessage("§d✦ §fКак применить кастомное зачарование:
             sender.sendMessage("§71. §fВозьми книгу в левую или правую ячейку наковальни.");
             sender.sendMessage("§72. §fПоложи подходящий предмет во вторую ячейку.");
             sender.sendMessage("§73. §fЗабери результат за уровни опыта.");
@@ -523,7 +555,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args) {
         boolean admin=sender.hasPermission("voidenchants.admin");
-        List<String> roots=new ArrayList<>(List.of("help","list","info","apply"));
+        List<String> roots=new ArrayList<>(List.of("help","list","info","apply","effects","history"));
         if(admin) roots.addAll(List.of("give","giveall","remove","strip","book","adminbook","reload","debug","drops","admin"));
         if(args.length==1) return roots.stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         String sub=args[0].toLowerCase(Locale.ROOT);
@@ -1074,8 +1106,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
         if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30 && ready(p,"execution",5000)) { e.setDamage(e.getDamage()*2); visual(p,"execution",le.getLocation()); }
         int hit=hitCounters.merge(uid,1,Integer::sum);
-        if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());spawnBloodDrips(p);}
+        if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));if(e.getEntity() instanceof LivingEntity bloodTarget) { spawnBloodDrips(bloodTarget); visual(p,"vampirism",bloodTarget.getLocation()); } else visual(p,"vampirism",p.getLocation());}
         if(e.getEntity() instanceof LivingEntity target) {
+            if(keys.contains("vampirism") && keys.contains("venom") && hit%5==0 && ready(p,"synergy_blood_poison",15000L)) {
+                target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,60,1,true,true));
+                p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+1.0));
+                spawnBloodDrips(target);
+                visual(p,"vampirism",target.getLocation());
+                p.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§5✦ §dСинергия: §cКровавый яд §8• §fВампиризм + Веном"));
+            }
             if(keys.contains("frost")&&hit%3==0&&ready(p,"frost",4000)){target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));visual(p,"frost",target.getLocation());}
             if(keys.contains("venom")&&hit%3==0&&ready(p,"venom",5000)){target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));visual(p,"venom",target.getLocation());}
             if(keys.contains("thunder") && Math.random()<0.20 && ready(p,"thunder",7000)) {
@@ -1128,7 +1167,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private void refreshDiver(Player p) {
         if (!has(p,"diver") || !inWater(p)) return;
         int level = Math.max(1, Math.min(3, equippedLevel(p,"diver")));
-        int amplifier = level - 1;
+        // Ослабление примерно в 1.6 раза: ступени усиления сжаты, максимум — эффект II.
+        int amplifier = Math.min(1, (int)Math.floor((level - 1) / 1.6));
         PotionEffect current = p.getPotionEffect(PotionEffectType.DOLPHINS_GRACE);
         // Reapply periodically so the bonus remains active even when the player is swimming without triggering move events.
         if (current == null || current.getAmplifier() < amplifier || current.getDuration() < 25) {
