@@ -573,11 +573,20 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         int maxPage=Math.max(0,(filtered.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
         Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE+" §8| §d"+categoryName(category));
+        for(int slot=0;slot<54;slot++) {
+            ItemStack panel=new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+            ItemMeta panelMeta=panel.getItemMeta();
+            panelMeta.setDisplayName(" ");
+            panelMeta.setItemModel(NamespacedKey.fromString("voidmain:gui_panel"));
+            panel.setItemMeta(panelMeta);
+            inv.setItem(slot,panel);
+        }
         for(int i=0;i<categories.size();i++) {
             Category c=categories.get(i);
             ItemStack tab=new ItemStack(c.icon()); ItemMeta tm=tab.getItemMeta();
-            tm.setDisplayName((c.key().equals(category)?"§d§l▶ ":"§7")+c.title());
-            tm.setLore(List.of("§8Категория зачарований","",c.key().equals(category)?"§aВыбрана":"§eНажми, чтобы открыть"));
+            tm.setDisplayName((c.key().equals(category)?"§d§l◆ ":"§8")+c.title());
+            tm.setLore(List.of("§8§oVOIDMAIN / ENCHANTMENTS","",c.key().equals(category)?"§d✦ §fВыбрана":"§7Нажми, чтобы открыть"));
+            tm.setItemModel(NamespacedKey.fromString("voidmain:gui_tab_"+c.key()));
             tm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,c.key());
             tab.setItemMeta(tm); inv.setItem(i,tab);
         }
@@ -623,8 +632,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Inventory inv=Bukkit.createInventory(null,27,LEVEL_TITLE);
         int tier=rarityTier(s);
         for(int lvl=1;lvl<=maxLevel(s);lvl++) {
-            ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
+            ItemStack icon=new ItemStack(Material.PAPER); ItemMeta meta=icon.getItemMeta();
             meta.setDisplayName(gradient(specName(s),tier)+" §7"+roman(lvl));
+            meta.setItemModel(NamespacedKey.fromString("voidmain:scroll_tier_"+tier));
             meta.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
