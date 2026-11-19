@@ -18,6 +18,8 @@ import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
 import org.bukkit.event.world.LootGenerateEvent;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.*;
 import org.bukkit.persistence.PersistentDataType;
@@ -41,12 +43,12 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Double> sneakSpeeds = new HashMap<>(), berserkBase = new HashMap<>();
     private final Map<UUID, Long> doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<String,Long> procCooldowns=new HashMap<>();
+    private final Map<String,Long> procCooldownDurations=new HashMap<>();
     private final Map<UUID,Integer> shieldAxeHits=new HashMap<>();
     private final Set<UUID> treeBreaking=new HashSet<>();
     private final Map<UUID, Location> shadowPositions = new HashMap<>();
     private final Map<UUID, Integer> shadowTasks = new HashMap<>();
     private final Set<Location> lavaBlocks = new HashSet<>();
-    private final Set<Location> creatorBlocks = new HashSet<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
@@ -56,15 +58,15 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
     private record Category(String key, String title, Material icon) {}
     private final List<Category> categories = List.of(
-        new Category("swords","⚔ Мечи",Material.NETHERITE_SWORD),
-        new Category("axes","🪓 Топоры",Material.NETHERITE_AXE),
-        new Category("mace","🔨 Булава",Material.MACE),
-        new Category("pickaxes","⛏ Кирки",Material.NETHERITE_PICKAXE),
-        new Category("armor","🛡 Броня",Material.DIAMOND_CHESTPLATE),
-        new Category("shields","🔰 Щиты",Material.SHIELD),
-        new Category("bows","🏹 Луки",Material.BOW),
-        new Category("spears","🔱 Копья",Material.TRIDENT),
-        new Category("elytra","🪽 Элитры",Material.ELYTRA)
+        new Category("swords","МЕЧИ",Material.NETHERITE_SWORD),
+        new Category("axes","ТОПОРЫ",Material.NETHERITE_AXE),
+        new Category("mace","БУЛАВА",Material.MACE),
+        new Category("pickaxes","КИРКИ",Material.NETHERITE_PICKAXE),
+        new Category("armor","БРОНЯ",Material.DIAMOND_CHESTPLATE),
+        new Category("shields","ЩИТЫ",Material.SHIELD),
+        new Category("bows","ЛУКИ",Material.BOW),
+        new Category("spears","КОПЬЯ",Material.TRIDENT),
+        new Category("elytra","ЭЛИТРЫ",Material.ELYTRA)
     );
     private final List<Spec> specs = List.of(
         new Spec("magnet","Магнит","Добытые предметы притягиваются прямо в инвентарь",Material.IRON_INGOT,1,false),
@@ -112,7 +114,6 @@ new Spec("berserk","Берсерк","Скорость атаки топором 
 new Spec("godslayer","Убийца Богов","Наносит двойной урон игрокам",Material.NETHERITE_SWORD,1,false),
 new Spec("worldeater","Пожиратель Миров","Удар булавой с высоты: двойной урон и +2 сердца",Material.MACE,1,false),
 new Spec("immortality","Бессмертие","Смертельный удар оставляет 1 сердце; защита 2 секунды",Material.TOTEM_OF_UNDYING,1,false),
-new Spec("creatorhand","Длань Творца","Позволяет разрушать бедрок и барьеры",Material.BEDROCK,1,false),
 new Spec("reflection","Отражение","Отражает 15% заблокированного урона",Material.SHIELD,1,false),
 new Spec("secondwind","Второе дыхание","При блоке на низком здоровье даёт регенерацию II",Material.GHAST_TEAR,1,false),
 new Spec("unbreakable","Не ломаемый","Щит выдерживает пять ударов топором",Material.SHIELD,1,false),
@@ -134,7 +135,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Objects.requireNonNull(getCommand("voidenchants")).setTabCompleter(this);
         getConfig().options().copyDefaults(true);
         saveDefaultConfig();
-        loadCreatorBlocks();
         Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(p->{updateCooldownBar(p); refreshDiver(p); if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);}),5L,5L);
         saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
@@ -175,7 +175,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         return n == null ? 1 : n;
     }
     private int rarityTier(Spec s) { int fallback = switch(s.key()) {
-        case "godslayer","worldeater","immortality","creatorhand" -> 0;
+        case "godslayer","worldeater","immortality" -> 0;
         case "thunder","lightaura" -> 1;
         case "blackhole","spear_dash","stun" -> 1;
         case "shadow","hook","cleave","fish" -> 2;
@@ -206,7 +206,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "chameleon","immortality" -> "Нагрудник";
         case "berserk" -> "Топор";
         case "worldeater" -> "Булава";
-        case "creatorhand" -> "Кирка";
         case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> "Щит";
         case "woodcutter","cleave","stun","heaviness","axemaster" -> "Топор";
         case "fish" -> "Шлем";
@@ -290,7 +289,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "berserk" -> {w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.5f,1.4f);}
         case "godslayer","worldeater" -> {w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,30,.5,.6,.5,.04);p.playSound(l,Sound.ENTITY_WITHER_HURT,.8f,.7f);}
         case "immortality" -> {w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08);p.playSound(l,Sound.ITEM_TOTEM_USE,1f,1f);}
-        case "creatorhand" -> {w.spawnParticle(Particle.END_ROD,l,24,.4,.5,.4,.04);p.playSound(l,Sound.BLOCK_BEACON_ACTIVATE,.8f,1.4f);}
         case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> {w.spawnParticle(Particle.FLASH,l,1,0,0,0,0);w.spawnParticle(Particle.ENCHANT,l,28,.5,.5,.5,.6);p.playSound(l,Sound.ITEM_SHIELD_BLOCK,.9f,1.3f);}
         case "woodcutter" -> {w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f);}
         case "cleave","axemaster" -> {w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.3,.4,.3,0);p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.9f,.8f);}
@@ -511,7 +509,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "swords" -> Set.of("moon","godslayer","vampirism","frost","venom","execution","phantomblade").contains(s.key());
             case "axes" -> Set.of("woodcutter","cleave","stun","heaviness","axemaster","berserk").contains(s.key());
             case "mace" -> Set.of("thunder","blackhole","bounce","worldeater").contains(s.key());
-            case "pickaxes" -> Set.of("magnet","drill","autosmelt","veinminer","haste","experience","creatorhand").contains(s.key());
+            case "pickaxes" -> Set.of("magnet","drill","autosmelt","veinminer","haste","experience").contains(s.key());
             case "armor" -> Set.of("fish","dragonbreath","sneak","diver","immunity","softsteps","lavawalker","owl","wisdom","radar","chameleon","immortality","shadow","doublejump","waterwalker").contains(s.key());
             case "shields" -> Set.of("reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield").contains(s.key());
             case "bows" -> Set.of("sniper").contains(s.key());
@@ -822,7 +820,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "chameleon","immortality" -> type.name().endsWith("_CHESTPLATE");
             case "berserk" -> type.name().endsWith("_AXE");
             case "worldeater" -> type==Material.MACE;
-            case "creatorhand" -> type.name().endsWith("_PICKAXE");
             case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> type==Material.SHIELD;
             case "drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
             case "vampirism","frost","venom","execution","phantomblade" -> type.name().endsWith("_SWORD");
@@ -1082,21 +1079,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10 && ready(victim,"dragonbreath",8000)) { attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0)); visual(victim,"dragonbreath",attacker.getLocation()); }
     }
-    private void loadCreatorBlocks() {
-        for(String raw:getConfig().getStringList("admin-enchants.creator-blocks")) {
-            String[] part=raw.split(";");
-            if(part.length!=4) continue;
-            World world=Bukkit.getWorld(part[0]); if(world==null) continue;
-            try { creatorBlocks.add(new Location(world,Integer.parseInt(part[1]),Integer.parseInt(part[2]),Integer.parseInt(part[3]))); }
-            catch(NumberFormatException ignored) {}
-        }
-    }
-    private void saveCreatorBlocks() {
-        List<String> data=new ArrayList<>();
-        for(Location loc:creatorBlocks) if(loc.getWorld()!=null)
-            data.add(loc.getWorld().getName()+";"+loc.getBlockX()+";"+loc.getBlockY()+";"+loc.getBlockZ());
-        getConfig().set("admin-enchants.creator-blocks",data); saveConfig();
-    }
     private void refreshDiver(Player p) {
         if (!has(p,"diver") || !inWater(p)) return;
         int level = Math.max(1, Math.min(3, equippedLevel(p,"diver")));
@@ -1207,10 +1189,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         doubleJumpCooldown.put(p.getUniqueId(),System.currentTimeMillis()+40000L);
         p.setAllowFlight(false);Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);visual(p,"doublejump",p.getLocation());
     }
-    @EventHandler public void onCreatorBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
-        ItemStack item=e.getItemInHand();
-        if(item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE)) creatorBlocks.add(e.getBlockPlaced().getLocation()); saveCreatorBlocks();
-    }
     @EventHandler public void onShieldItemDamage(PlayerItemDamageEvent e) {
         ItemStack item=e.getItem();
         if(item.getType()!=Material.SHIELD || !hasEnchant(item,"unbreakable")) return;
@@ -1218,17 +1196,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(hits%5!=0) e.setCancelled(true); else { e.setDamage(item.getType().getMaxDurability()); shieldAxeHits.put(e.getPlayer().getUniqueId(),0); }
     }
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
-        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
-        if(creatorBlocks.contains(e.getBlock().getLocation()) && !e.getPlayer().hasPermission("voidenchants.admin")) { e.setCancelled(true); e.getPlayer().sendMessage("§cБлок Творца нельзя сломать."); return; }
-        if(creatorBlocks.contains(e.getBlock().getLocation())) { creatorBlocks.remove(e.getBlock().getLocation()); saveCreatorBlocks(); }
-        if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand")) {
-            e.setCancelled(true); Block block=e.getBlock(); block.setType(Material.AIR,false);
-            ItemStack drop=new ItemStack(Material.NETHERITE_BLOCK); ItemMeta meta=drop.getItemMeta();
-            meta.setDisplayName("§c§lБлок Творца"); meta.setLore(List.of("§7Создан зачарованием §cДлань Творца"));
-            meta.getPersistentDataContainer().set(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE,(byte)1); drop.setItemMeta(meta);
-            if(Math.random()<getConfig().getDouble("admin-enchants.creator-block-chance",0.10)) block.getWorld().dropItemNaturally(block.getLocation(),drop);
-            e.getPlayer().playSound(block.getLocation(),Sound.BLOCK_BEACON_ACTIVATE,1f,1.2f);
-        }
+        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); }
     }
     @EventHandler public void onInteract(PlayerInteractEvent e) {
         if(e.getHand()!=EquipmentSlot.HAND) return;
