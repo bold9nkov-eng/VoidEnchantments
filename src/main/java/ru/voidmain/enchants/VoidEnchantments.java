@@ -228,7 +228,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemMeta m = item.getItemMeta();
         int tier=rarityTier(s);
         m.setDisplayName(gradient(specName(s),tier));
-        m.setItemModel(NamespacedKey.fromString("voidmain:enchant_scroll"));
+        m.setItemModel(NamespacedKey.fromString("voidmain:scroll_tier_"+tier));
         m.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
             "§7Редкость: "+rarityColor(tier)+rarityName(tier),
             "§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
@@ -268,47 +268,78 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private long cooldownLeft(UUID uuid,String key) { return Math.max(0L,procCooldowns.getOrDefault(uuid+":"+key,0L)-System.currentTimeMillis()); }
     private void updateCooldownBar(Player p) {
         if(!getConfig().getBoolean("cooldowns.actionbar.enabled",true)) return;
-        List<String> lines=new ArrayList<>();
+        List<String> active=new ArrayList<>();
         for(Spec sp:specs) {
+            String id=p.getUniqueId()+":"+sp.key();
             long left=cooldownLeft(p.getUniqueId(),sp.key());
-            if(left>0 && has(p,sp.key())) lines.add(getConfig().getString("cooldowns.actionbar.format","§d{enchant}: §f{seconds}с").replace("{enchant}",specName(sp)).replace("{seconds}",String.valueOf((left+999)/1000)));
+            if(left<=0 || !has(p,sp.key())) continue;
+            long total=Math.max(left,procCooldownDurations.getOrDefault(id,left));
+            int filled=Math.max(0,Math.min(10,(int)Math.round((1.0-(double)left/total)*10.0)));
+            String bar="§d"+"▰".repeat(filled)+"§8"+"▱".repeat(10-filled);
+            active.add("§5✦ "+gradient(specName(sp),rarityTier(sp))+" §8["+bar+"§8] §f"+String.format(Locale.US,"%.1f",left/1000.0)+"с");
         }
-        p.sendActionBar(Component.text(lines.isEmpty()?"":String.join(getConfig().getString("cooldowns.actionbar.separator"," §8| "),lines)));
+        String output=active.isEmpty()?"":String.join(" §8◆ ",active.subList(0,Math.min(2,active.size())));
+        if(active.size()>2) output+=" §8+"+(active.size()-2);
+        p.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(output));
     }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
     private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
     private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key()) && rarityTier(x)>0).mapToDouble(this::dropChance).sum(); }
     private String chanceText(Spec s) { if(rarityTier(s)==0) return "только админам"; double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
-    private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
-    private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;
-        String customSound=key.equals("berserk")?"voidmain:hit_magic":"voidmain:enchant/"+key;
-        p.playSound(l,customSound,SoundCategory.PLAYERS,0.65f,1.0f);
+    private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);procCooldownDurations.put(k,Math.max(1L,ms));return true;}
+    private void spawnVoidRing(Location center,double radius,Color color,int points) {
+        World world=center.getWorld(); if(world==null)return;
+        Particle.DustOptions dust=new Particle.DustOptions(color,1.15f);
+        for(int i=0;i<points;i++) {
+            double angle=Math.PI*2.0*i/points;
+            world.spawnParticle(Particle.DUST,center.clone().add(Math.cos(angle)*radius,.12,Math.sin(angle)*radius),1,.01,.01,.01,0,dust);
+        }
+    }
+    private void spawnBloodDrips(Player player) {
+        Particle.DustOptions blood=new Particle.DustOptions(Color.fromRGB(156,8,31),1.05f);
+        new BukkitRunnable() {
+            int frame=0;
+            @Override public void run() {
+                if(!player.isOnline() || frame>=9) { cancel(); return; }
+                Location origin=player.getLocation();
+                for(int i=0;i<3;i++) {
+                    double angle=frame*.62+i*Math.PI*2/3;
+                    Location drop=origin.clone().add(Math.cos(angle)*.23,1.52-frame*.145,Math.sin(angle)*.23);
+                    player.getWorld().spawnParticle(Particle.DUST,drop,1,.008,.012,.008,0,blood);
+                }
+                frame++;
+            }
+        }.runTaskTimer(this,0L,1L);
+    }
+    private void visual(Player p,String key,Location l) {
+        World w=l.getWorld(); if(w==null)return;
         switch(key) {
-        case "moon" -> {w.spawnParticle(Particle.END_ROD,l,12,.3,.5,.3,.02);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.8f,1.8f);}
-        case "chameleon" -> {w.spawnParticle(Particle.HAPPY_VILLAGER,l,20,.4,.5,.4,.03);p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.8f,1.2f);}
-        case "berserk" -> {w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.5f,1.4f);}
-        case "godslayer","worldeater" -> {w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,30,.5,.6,.5,.04);p.playSound(l,Sound.ENTITY_WITHER_HURT,.8f,.7f);}
-        case "immortality" -> {w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08);p.playSound(l,Sound.ITEM_TOTEM_USE,1f,1f);}
-        case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> {w.spawnParticle(Particle.FLASH,l,1,0,0,0,0);w.spawnParticle(Particle.ENCHANT,l,28,.5,.5,.5,.6);p.playSound(l,Sound.ITEM_SHIELD_BLOCK,.9f,1.3f);}
-        case "woodcutter" -> {w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f);}
-        case "cleave","axemaster" -> {w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.3,.4,.3,0);p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.9f,.8f);}
-        case "stun" -> {w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_ANVIL_LAND,.8f,1.5f);}
-        case "heaviness" -> {w.spawnParticle(Particle.BLOCK,l,20,.3,.4,.3,.1,Material.ANVIL.createBlockData());p.playSound(l,Sound.BLOCK_CHAIN_HIT,.8f,.7f);}
-        case "fish","diver" -> {w.spawnParticle(Particle.BUBBLE,l,20,.4,.5,.4,.04);p.playSound(l,Sound.ENTITY_DOLPHIN_SPLASH,.7f,1.3f);}
-        case "magnet" -> {w.spawnParticle(Particle.ENCHANT,l,16,.3,.4,.3,.6);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.7f,1.7f);}
-        case "lavawalker" -> {w.spawnParticle(Particle.FLAME,l,18,.5,.1,.5,.02);p.playSound(l,Sound.BLOCK_PORTAL_AMBIENT,.5f,.8f);}
-        case "waterwalker" -> {w.spawnParticle(Particle.SPLASH,l,20,.5,.2,.5,.1);p.playSound(l,Sound.BLOCK_GLASS_PLACE,.8f,1.6f);}
-        case "blackhole" -> {w.spawnParticle(Particle.PORTAL,l,45,.5,.7,.5,.3);w.spawnParticle(Particle.REVERSE_PORTAL,l,25,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_BEACON_DEACTIVATE,.8f,.55f);}
-        case "hook" -> {w.spawnParticle(Particle.CRIT,l,18,.3,.5,.3,.1);p.playSound(l,Sound.ENTITY_FISHING_BOBBER_RETRIEVE,.9f,.8f);}
-        case "bounce","doublejump","wings" -> {w.spawnParticle(Particle.CLOUD,l,24,.4,.2,.4,.08);p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.8f,1.4f);}
-        case "thunder" -> {w.spawnParticle(Particle.ELECTRIC_SPARK,l,35,.5,.7,.5,.2);p.playSound(l,Sound.ENTITY_LIGHTNING_BOLT_THUNDER,.8f,1.4f);}
-        case "phantomblade","shadow" -> {w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03);p.playSound(l,Sound.ENTITY_ENDERMAN_TELEPORT,.65f,1.6f);}
-        case "frost" -> {w.spawnParticle(Particle.SNOWFLAKE,l,20,.3,.5,.3,.04);p.playSound(l,Sound.BLOCK_GLASS_BREAK,.7f,1.7f);}
-        case "venom","immunity" -> {w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02);p.playSound(l,Sound.ENTITY_WITCH_AMBIENT,.6f,1.6f);}
-        case "dragonbreath" -> {w.spawnParticle(Particle.DRAGON_BREATH,l,24,.4,.5,.4,.02);p.playSound(l,Sound.ENTITY_ENDER_DRAGON_GROWL,.5f,1.6f);}
-        case "vampirism" -> {w.spawnParticle(Particle.HEART,l,10,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.55f,1.5f);}
-        default -> {w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.6f,1.2f);}
-    }}
+            case "moon" -> { w.spawnParticle(Particle.END_ROD,l,18,.35,.55,.35,.025); spawnVoidRing(l,.8,Color.fromRGB(222,224,255),24); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.75f,.75f); }
+            case "chameleon" -> { w.spawnParticle(Particle.HAPPY_VILLAGER,l,16,.4,.5,.4,.025); w.spawnParticle(Particle.DUST,l,12,.35,.45,.35,0,new Particle.DustOptions(Color.fromRGB(150,93,255),1.1f)); p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.75f,.85f); }
+            case "berserk" -> { w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02); w.spawnParticle(Particle.CRIT,l,16,.35,.45,.35,.1); p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.55f,.85f); }
+            case "godslayer","worldeater" -> { w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,26,.45,.6,.45,.035); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); spawnVoidRing(l,1.05,Color.fromRGB(135,39,214),32); spawnVoidRing(l,.62,Color.fromRGB(230,226,255),20); p.playSound(l,Sound.ENTITY_WITHER_HURT,.72f,.65f); }
+            case "immortality" -> { w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08); spawnVoidRing(l,.85,Color.fromRGB(244,221,255),26); p.playSound(l,Sound.ITEM_TOTEM_USE,1f,1f); }
+            case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> { w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); w.spawnParticle(Particle.ENCHANT,l,22,.5,.5,.5,.45); spawnVoidRing(l,.75,Color.fromRGB(161,75,255),24); p.playSound(l,Sound.ITEM_SHIELD_BLOCK,.9f,1.0f); }
+            case "woodcutter" -> { w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1); w.spawnParticle(Particle.BLOCK,l,10,.3,.4,.3,.1,Material.OAK_LOG.createBlockData()); p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f); }
+            case "cleave","axemaster" -> { w.spawnParticle(Particle.SWEEP_ATTACK,l,4,.35,.4,.35,0); w.spawnParticle(Particle.CRIT,l,14,.3,.45,.3,.08); p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.9f,.8f); }
+            case "stun" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); p.playSound(l,Sound.BLOCK_ANVIL_LAND,.8f,1.0f); }
+            case "heaviness" -> { w.spawnParticle(Particle.BLOCK,l,20,.3,.4,.3,.1,Material.ANVIL.createBlockData()); w.spawnParticle(Particle.CLOUD,l,12,.25,.25,.25,.02); p.playSound(l,Sound.BLOCK_CHAIN_HIT,.8f,.7f); }
+            case "fish","diver" -> { w.spawnParticle(Particle.BUBBLE,l,22,.4,.5,.4,.04); w.spawnParticle(Particle.SPLASH,l,10,.3,.25,.3,.04); p.playSound(l,Sound.ENTITY_DOLPHIN_SPLASH,.7f,1.0f); }
+            case "magnet" -> { w.spawnParticle(Particle.ENCHANT,l,22,.3,.4,.3,.5); spawnVoidRing(l,.58,Color.fromRGB(189,151,255),20); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.7f,1.0f); }
+            case "lavawalker" -> { w.spawnParticle(Particle.FLAME,l,18,.5,.1,.5,.02); w.spawnParticle(Particle.LAVA,l,5,.3,.05,.3,0); p.playSound(l,Sound.BLOCK_LAVA_POP,.65f,.8f); }
+            case "waterwalker" -> { w.spawnParticle(Particle.SPLASH,l,20,.5,.2,.5,.1); w.spawnParticle(Particle.BUBBLE,l,12,.4,.2,.4,.03); p.playSound(l,Sound.BLOCK_GLASS_PLACE,.8f,1.0f); }
+            case "blackhole" -> { w.spawnParticle(Particle.PORTAL,l,45,.5,.7,.5,.3); w.spawnParticle(Particle.REVERSE_PORTAL,l,28,.4,.6,.4,.12); spawnVoidRing(l,.9,Color.fromRGB(89,24,135),32); p.playSound(l,Sound.BLOCK_BEACON_DEACTIVATE,.8f,.55f); }
+            case "hook" -> { w.spawnParticle(Particle.CRIT,l,18,.3,.5,.3,.1); w.spawnParticle(Particle.SWEEP_ATTACK,l,2,.2,.2,.2,0); p.playSound(l,Sound.ENTITY_FISHING_BOBBER_RETRIEVE,.9f,.8f); }
+            case "bounce","doublejump","wings","hover" -> { w.spawnParticle(Particle.CLOUD,l,24,.4,.2,.4,.08); w.spawnParticle(Particle.END_ROD,l,10,.3,.25,.3,.02); p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.8f,1.0f); }
+            case "thunder" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,35,.5,.7,.5,.2); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); p.playSound(l,Sound.ENTITY_LIGHTNING_BOLT_THUNDER,.8f,1.0f); }
+            case "phantomblade","shadow" -> { w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03); w.spawnParticle(Particle.REVERSE_PORTAL,l,12,.25,.35,.25,.08); p.playSound(l,Sound.ENTITY_ENDERMAN_TELEPORT,.65f,1.0f); }
+            case "frost" -> { w.spawnParticle(Particle.SNOWFLAKE,l,26,.3,.5,.3,.04); spawnVoidRing(l,.7,Color.fromRGB(158,222,255),22); p.playSound(l,Sound.BLOCK_GLASS_BREAK,.7f,1.0f); }
+            case "venom","immunity" -> { w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02); w.spawnParticle(Particle.DUST,l,12,.3,.45,.3,0,new Particle.DustOptions(Color.fromRGB(85,194,93),1.0f)); p.playSound(l,Sound.ENTITY_WITCH_AMBIENT,.6f,.9f); }
+            case "dragonbreath" -> { w.spawnParticle(Particle.DRAGON_BREATH,l,24,.4,.5,.4,.02); w.spawnParticle(Particle.FLAME,l,10,.3,.3,.3,.02); p.playSound(l,Sound.ENTITY_ENDER_DRAGON_GROWL,.5f,.8f); }
+            case "vampirism" -> { w.spawnParticle(Particle.HEART,l,5,.22,.35,.22,.01); w.spawnParticle(Particle.DUST,l,18,.35,.5,.35,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.1f)); spawnVoidRing(l,.55,Color.fromRGB(154,5,28),18); p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.5f,.85f); }
+            default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.6f,1.0f); }
+        }
+    }
     private void sendHelp(CommandSender sender, boolean admin) {
         sender.sendMessage("§5§lVoidEnchantments §8— §fкоманды");
         sender.sendMessage("§d/enchants §7— открыть каталог");
@@ -337,7 +368,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private void giveBook(Player p,Spec s,int lvl) {
         Map<Integer,ItemStack> rest=p.getInventory().addItem(book(s,lvl));
         rest.values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it));
-        p.playSound(p.getLocation(),"voidmain:scroll_open",SoundCategory.PLAYERS,0.9f,1.0f);
+        p.playSound(p.getLocation(),Sound.BLOCK_ENCHANTMENT_TABLE_USE,0.85f,0.85f);
+        p.playSound(p.getLocation(),Sound.BLOCK_AMETHYST_BLOCK_CHIME,0.5f,1.25f);
     }
     private void sendSpecInfo(CommandSender sender,Spec s) {
         int tier=rarityTier(s);
@@ -711,7 +743,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack left=e.getView().getTopInventory().getItem(0);
         ItemStack right=e.getView().getTopInventory().getItem(1);
         if(id(left)!=null || id(right)!=null)
-            p.playSound(p.getLocation(),"voidmain:enchant_apply",SoundCategory.PLAYERS,1.0f,1.0f);
+            p.playSound(p.getLocation(),Sound.BLOCK_ENCHANTMENT_TABLE_USE,0.9f,1.0f);
+            p.playSound(p.getLocation(),Sound.BLOCK_AMETHYST_BLOCK_CHIME,0.7f,1.5f);
     }
 
     private void immobilize(LivingEntity target) { immobilize(target,40L); }
@@ -1028,7 +1061,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
         if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30 && ready(p,"execution",5000)) { e.setDamage(e.getDamage()*2); visual(p,"execution",le.getLocation()); }
         int hit=hitCounters.merge(uid,1,Integer::sum);
-        if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());}
+        if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());spawnBloodDrips(p);}
         if(e.getEntity() instanceof LivingEntity target) {
             if(keys.contains("frost")&&hit%3==0&&ready(p,"frost",4000)){target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));visual(p,"frost",target.getLocation());}
             if(keys.contains("venom")&&hit%3==0&&ready(p,"venom",5000)){target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));visual(p,"venom",target.getLocation());}
@@ -1224,7 +1257,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         hitCounters.remove(uid);
         maceHitCounters.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
         sneakSpeeds.remove(uid); berserkBase.remove(uid);
-        doubleJumpCooldown.remove(uid);procCooldowns.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
+        doubleJumpCooldown.remove(uid);procCooldowns.keySet().removeIf(k->k.startsWith(uid.toString()+":"));procCooldownDurations.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
         shadowSince.remove(uid); shadowPositions.remove(uid);
         Integer shadowTask=shadowTasks.remove(uid); if(shadowTask!=null)Bukkit.getScheduler().cancelTask(shadowTask);
         Integer task=radarTasks.remove(uid); if(task!=null) Bukkit.getScheduler().cancelTask(task);
