@@ -44,6 +44,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Long> doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<String,Long> procCooldowns=new HashMap<>();
     private final Map<String,Long> procCooldownDurations=new HashMap<>();
+    private final Set<String> cooldownHudKeys=Set.of("hook","bounce","doublejump","immortality","titanshield","bloodsucker","shove","lightaura","secondwind");
     private final Map<UUID,Integer> shieldAxeHits=new HashMap<>();
     private final Set<UUID> treeBreaking=new HashSet<>();
     private final Map<UUID, Location> shadowPositions = new HashMap<>();
@@ -270,6 +271,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(!getConfig().getBoolean("cooldowns.actionbar.enabled",true)) return;
         List<String> active=new ArrayList<>();
         for(Spec sp:specs) {
+            if(!cooldownHudKeys.contains(sp.key())) continue;
             String id=p.getUniqueId()+":"+sp.key();
             long left=cooldownLeft(p.getUniqueId(),sp.key());
             if(left<=0 || !has(p,sp.key())) continue;
@@ -1230,6 +1232,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(!has(p,"doublejump") || p.getGameMode()==GameMode.CREATIVE || p.getGameMode()==GameMode.SPECTATOR) return;
         e.setCancelled(true);
         if(System.currentTimeMillis()<doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L)) return;
+        if(!ready(p,"doublejump",40000L)) return;
         doubleJumpCooldown.put(p.getUniqueId(),System.currentTimeMillis()+40000L);
         p.setAllowFlight(false);Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);visual(p,"doublejump",p.getLocation());
     }
