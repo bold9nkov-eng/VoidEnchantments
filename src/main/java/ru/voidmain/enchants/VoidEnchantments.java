@@ -415,6 +415,29 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); playEnchantSound(p,key,l); }
             default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); playEnchantSound(p,key,l); }
         }
+        Color signature = switch(key) {
+            case "venom","immunity" -> Color.fromRGB(93,220,104);
+            case "execution","lavawalker","autosmelt" -> Color.fromRGB(255,126,48);
+            case "thunder","stun","experience" -> Color.fromRGB(255,226,92);
+            case "berserk","bloodsucker" -> Color.fromRGB(210,38,58);
+            case "spear_dash","aerodynamics" -> Color.fromRGB(111,220,255);
+            case "bounce","doublejump" -> Color.fromRGB(188,116,255);
+            case "hook","waterwalker","diver","fish" -> Color.fromRGB(85,184,255);
+            case "phantomblade","shadow" -> Color.fromRGB(143,105,205);
+            case "reflection","titanshield","unbreakable" -> Color.fromRGB(220,224,238);
+            case "secondwind","lightaura" -> Color.fromRGB(157,255,203);
+            case "softsteps","sneak" -> Color.fromRGB(196,169,235);
+            case "woodcutter" -> Color.fromRGB(160,112,72);
+            case "drill","veinminer","haste","heaviness" -> Color.fromRGB(151,160,174);
+            case "wings","hover" -> Color.fromRGB(210,240,255);
+            case "chameleon" -> Color.fromRGB(175,110,255);
+            default -> null;
+        };
+        if(signature!=null) {
+            spawnVoidRing(l,.48,signature,20);
+            spawnVoidRing(l,.76,signature,28);
+            w.spawnParticle(Particle.DUST,l.clone().add(0,.72,0),18,.28,.48,.28,0,new Particle.DustOptions(signature,1.15f));
+        }
     }
     private void sendHelp(CommandSender sender, boolean admin) {
         sender.sendMessage("§5§lVoidEnchantments §8— §fкоманды");
