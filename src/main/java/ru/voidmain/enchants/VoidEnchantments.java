@@ -401,9 +401,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); playEnchantSound(p,key,l); }
             default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); playEnchantSound(p,key,l); }
         }
-        Color signature = switch(key) {
+        if(Set.of("vampirism","bloodsucker","frost","venom","execution","thunder","dragonbreath","berserk","godslayer","worldeater","blackhole","phantomblade","shadow","immortality","reflection","secondwind","unbreakable","lightaura","titanshield").contains(key)) animateCombatEffect(p,key,l);\n        Color signature = switch(key) {
             case "venom","immunity" -> Color.fromRGB(93,220,104);
-            case "execution","lavawalker","autosmelt" -> Color.fromRGB(255,126,48);
+            case "execution" -> Color.fromRGB(255,126,48);
             case "thunder","stun","experience" -> Color.fromRGB(255,226,92);
             case "berserk","bloodsucker" -> Color.fromRGB(210,38,58);
             case "spear_dash","aerodynamics" -> Color.fromRGB(111,220,255);
@@ -414,7 +414,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "secondwind","lightaura" -> Color.fromRGB(157,255,203);
             case "softsteps","sneak" -> Color.fromRGB(196,169,235);
             case "woodcutter" -> Color.fromRGB(160,112,72);
-            case "drill","veinminer","haste","heaviness" -> Color.fromRGB(151,160,174);
+            case "heaviness" -> Color.fromRGB(151,160,174);
             case "wings","hover" -> Color.fromRGB(210,240,255);
             case "chameleon" -> Color.fromRGB(175,110,255);
             default -> null;
@@ -425,6 +425,73 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             w.spawnParticle(Particle.DUST,l.clone().add(0,.72,0),18,.28,.48,.28,0,new Particle.DustOptions(signature,1.15f));
         }
     }
+    private void animateCombatEffect(Player source,String key,Location origin) {
+        World world=origin.getWorld(); if(world==null)return;
+        final Color tint=switch(key) {
+            case "vampirism","bloodsucker","berserk" -> Color.fromRGB(190,24,52);
+            case "frost" -> Color.fromRGB(120,210,255);
+            case "venom" -> Color.fromRGB(80,220,90);
+            case "thunder","godslayer","lightaura" -> Color.fromRGB(255,205,75);
+            case "execution","dragonbreath" -> Color.fromRGB(255,105,55);
+            case "reflection","titanshield","unbreakable" -> Color.fromRGB(205,225,255);
+            case "secondwind","immortality" -> Color.fromRGB(145,255,190);
+            case "worldeater","blackhole","phantomblade","shadow" -> Color.fromRGB(135,65,220);
+            default -> Color.fromRGB(190,150,255);
+        };
+        new BukkitRunnable() {
+            int tick=0;
+            @Override public void run() {
+                if(tick>=9 || !origin.isWorldLoaded()) { cancel(); return; }
+                Location c=origin.clone().add(0,0.85,0);
+                double radius=0.28+tick*0.105;
+                switch(key) {
+                    case "vampirism","bloodsucker" -> {
+                        for(int n=0;n<5;n++){double a=(tick*0.62)+(Math.PI*2*n/5);world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*radius,Math.sin(a*1.7)*.24,Math.sin(a)*radius),1,0,0,0,0,new Particle.DustOptions(tint,1.35f));}
+                        world.spawnParticle(Particle.HEART,c,1,.12,.18,.12,0);
+                    }
+                    case "frost" -> {
+                        for(int n=0;n<8;n++){double a=Math.PI*2*n/8+tick*.18;world.spawnParticle(Particle.SNOWFLAKE,c.clone().add(Math.cos(a)*radius,0,Math.sin(a)*radius),1,0,0,0,0);}
+                        if(tick==5)world.spawnParticle(Particle.ITEM_CRACK,c,18,.35,.35,.35,.08,new ItemStack(Material.ICE));
+                    }
+                    case "venom" -> {
+                        world.spawnParticle(Particle.SPORE_BLOSSOM_AIR,c,5,.24,.18,.24,.005);
+                        world.spawnParticle(Particle.DUST,c,7,.28,.24,.28,0,new Particle.DustOptions(tint,1.15f));
+                    }
+                    case "thunder","godslayer","execution" -> {
+                        for(int n=0;n<3;n++){double a=tick*.45+n*Math.PI*2/3;world.spawnParticle(Particle.ELECTRIC_SPARK,c.clone().add(Math.cos(a)*radius,Math.sin(tick*.35)*.25,Math.sin(a)*radius),2,.02,.08,.02,.02);}
+                        if(tick==2||tick==6)world.spawnParticle(Particle.FLASH,c,1,0,0,0,0);
+                    }
+                    case "reflection","titanshield","unbreakable","lightaura" -> {
+                        double r=0.55+tick*.08;
+                        for(int n=0;n<18;n++){double a=Math.PI*2*n/18;world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*r,Math.sin(a)*r,0),1,0,0,0,0,new Particle.DustOptions(tint,1.2f));}
+                        world.spawnParticle(Particle.ENCHANT,c,8,.42,.45,.42,.25);
+                    }
+                    case "secondwind","immortality" -> {
+                        double a=tick*.7;world.spawnParticle(Particle.HEART,c.clone().add(Math.cos(a)*radius,.15+tick*.035,Math.sin(a)*radius),1,0,0,0,0);
+                        world.spawnParticle(Particle.TOTEM_OF_UNDYING,c,3,.22,.28,.22,.04);
+                    }
+                    case "berserk" -> {
+                        double r=.35+tick*.09;for(int n=0;n<12;n++){double a=Math.PI*2*n/12;world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*r,0,Math.sin(a)*r),1,0,0,0,0,new Particle.DustOptions(tint,1.25f));}
+                        world.spawnParticle(Particle.FLAME,c,2,.28,.28,.28,.01);
+                    }
+                    case "worldeater","blackhole" -> {
+                        for(int n=0;n<12;n++){double a=tick*.55+n*Math.PI*2/12;world.spawnParticle(Particle.REVERSE_PORTAL,c.clone().add(Math.cos(a)*radius,.04*tick,Math.sin(a)*radius),1,0,0,0,.015);}
+                        if(tick==4)spawnBlackHoleCube(c);
+                    }
+                    case "dragonbreath" -> world.spawnParticle(Particle.DRAGON_BREATH,c,12,.38,.28,.38,.015);
+                    case "phantomblade","shadow" -> {
+                        world.spawnParticle(Particle.SMOKE,c,8,.24,.32,.24,.015);
+                        world.spawnParticle(Particle.REVERSE_PORTAL,c,5,.28,.35,.28,.02);
+                    }
+                    default -> {
+                        for(int n=0;n<10;n++){double a=Math.PI*2*n/10+tick*.22;world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*radius,0,Math.sin(a)*radius),1,0,0,0,0,new Particle.DustOptions(tint,1.0f));}
+                    }
+                }
+                tick++;
+            }
+        }.runTaskTimer(this,0L,1L);
+    }
+
     private void sendHelp(CommandSender sender, boolean admin) {
         sender.sendMessage("§5§lVoidEnchantments §8— §fкоманды");
         sender.sendMessage("§d/enchants §7— открыть каталог");
