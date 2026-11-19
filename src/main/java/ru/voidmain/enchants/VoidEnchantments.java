@@ -479,7 +479,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             if(entries.isEmpty()) p.sendMessage("§7Пока нет записей."); else entries.forEach(p::sendMessage); return true;
         }
         if(sub.equals("apply")) {
-            sender.sendMessage("§d✦ §fКак применить кастомное зачарование:
+            sender.sendMessage("§d✦ §fКак применить кастомное зачарование:");
             sender.sendMessage("§71. §fВозьми книгу в левую или правую ячейку наковальни.");
             sender.sendMessage("§72. §fПоложи подходящий предмет во вторую ячейку.");
             sender.sendMessage("§73. §fЗабери результат за уровни опыта.");
