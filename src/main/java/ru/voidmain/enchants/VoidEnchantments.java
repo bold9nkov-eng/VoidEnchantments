@@ -58,6 +58,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
     private static final String CATALOG_TITLE = "§0✦ §5VoidMain §8| §dЗачарования";
     private static final String LEVEL_TITLE = "§0✦ §5VoidMain §8| §dВыбор уровня";
+    private static final String CATEGORY_TITLE = "§0✦ §5VoidMain §8| §dВыбор предмета";
 
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
     private record Category(String key, String title, Material icon) {}
@@ -113,7 +114,7 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("bounce","Отскок","ПКМ с булавой подбрасывает вверх примерно на 25 блоков",Material.MACE,1,false),
         new Spec("waterwalker","Водоход","Создаёт синий лёд под ногами на 3 секунды",Material.BLUE_ICE,1,false),
 new Spec("moon","Луна","Ночью +30% урона, днём −30% урона",Material.CLOCK,1,false),
-new Spec("chameleon","Хамелеон","Эффекты зависят от биома",Material.TURTLE_HELMET,1,false),
+
 new Spec("berserk","Берсерк","Скорость атаки топором растёт при низком здоровье",Material.IRON_AXE,1,false),
 new Spec("godslayer","Убийца Богов","Наносит двойной урон игрокам",Material.NETHERITE_SWORD,1,false),
 new Spec("worldeater","Пожиратель Миров","Удар булавой с высоты: двойной урон и +2 сердца",Material.MACE,1,false),
@@ -186,7 +187,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "armorbreaker","axemaster","doublejump","woodcutter","heaviness" -> 3;
         case "bounce" -> 1;
         case "waterwalker" -> 4;
-        case "chameleon","unbreakable","titanshield" -> 1;
+        case "unbreakable","titanshield" -> 1;
         case "reflection","shove" -> 3;
         case "secondwind","bloodsucker","berserk" -> 2;
         case "moon" -> 2;
@@ -208,7 +209,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private String appliesTo(Spec s) { return switch(s.key()) {
         case "magnet" -> "Кирка, лопата или топор";
         case "moon","godslayer" -> "Меч";
-        case "chameleon","immortality" -> "Нагрудник";
+        case "immortality" -> "Нагрудник";
         case "berserk" -> "Топор";
         case "worldeater" -> "Булава";
         case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> "Щит";
@@ -529,7 +530,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         String sub=args.length==0?"":args[0].toLowerCase(Locale.ROOT);
         boolean admin=sender.hasPermission("voidenchants.admin");
         if(sub.isEmpty()) {
-            if(sender instanceof Player p) openCatalog(p,0); else sendHelp(sender,admin);
+            if(sender instanceof Player p) openCategories(p); else sendHelp(sender,admin);
             return true;
         }
         if(sub.equals("help")) { sendHelp(sender,admin); return true; }
@@ -674,41 +675,91 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Integer value=marker.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
         return value==null?0:value;
     }
-    private void openCatalog(Player p,int page) {
-        int pageSize=45;
-        int maxPage=Math.max(0,(specs.size()-1)/pageSize);
+    private void fillGalaxy(Inventory inv) {
+        for(int slot=0;slot<inv.getSize();slot++) {
+            ItemStack tile=new ItemStack(Material.PURPLE_STAINED_GLASS_PANE);
+            ItemMeta meta=tile.getItemMeta();
+            meta.setDisplayName("§0 ");
+            meta.setItemModel(NamespacedKey.fromString("voidmain:gui_galaxy_tile_"+slot));
+            tile.setItemMeta(meta);
+            inv.setItem(slot,tile);
+        }
+    }
+    private void openCategories(Player p) {
+        Inventory inv=Bukkit.createInventory(null,54,CATEGORY_TITLE);
+        fillGalaxy(inv);
+        int[] slots={10,12,14,19,21,23,28,30,32};
+        for(int i=0;i<categories.size();i++) {
+            Category category=categories.get(i);
+            ItemStack icon=new ItemStack(category.icon());
+            ItemMeta meta=icon.getItemMeta();
+            meta.setDisplayName("§d§l"+category.title());
+            meta.setLore(List.of("§7Посмотреть чары для предмета","", "§eНажми, чтобы открыть"));
+            meta.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category.key());
+            icon.setItemMeta(meta);
+            inv.setItem(slots[i],icon);
+        }
+        ItemStack close=new ItemStack(Material.BARRIER);
+        ItemMeta cm=close.getItemMeta(); cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm);
+        inv.setItem(49,close);
+        p.openInventory(inv);
+    }
+    private boolean belongsTo(Spec spec,String category) {
+        String target=appliesTo(spec);
+        return switch(category) {
+            case "swords" -> target.contains("Меч");
+            case "axes" -> target.contains("топор") || target.contains("Топор");
+            case "mace" -> target.contains("Булава");
+            case "pickaxes" -> target.contains("Кирка") || target.contains("лопата");
+            case "armor" -> target.contains("Шлем") || target.contains("Нагрудник") || target.contains("Поножи")
+                    || target.contains("Ботинки") || target.contains("броня");
+            case "shields" -> target.contains("Щит");
+            case "bows" -> target.contains("Лук");
+            case "spears" -> target.contains("Копьё");
+            case "elytra" -> target.contains("Элитры");
+            default -> false;
+        };
+    }
+    private void openCatalog(Player p,String category,int page) {
+        Category selectedCategory=categories.stream().filter(c->c.key().equals(category)).findFirst().orElse(null);
+        if(selectedCategory==null) { openCategories(p); return; }
+        List<Spec> visible=specs.stream().filter(x->belongsTo(x,category)).toList();
+        int pageSize=36;
+        int maxPage=Math.max(0,(visible.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
         Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
+        fillGalaxy(inv);
         int start=page*pageSize;
-        for(int i=0;i<pageSize && start+i<specs.size();i++) {
-            Spec s=specs.get(start+i);
-            ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            int tier=rarityTier(s);
-            m.setDisplayName(gradient(specName(s),tier));
-            m.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
+        for(int i=0;i<pageSize && start+i<visible.size();i++) {
+            Spec spec=visible.get(start+i);
+            ItemStack icon=new ItemStack(spec.icon()); ItemMeta meta=icon.getItemMeta();
+            int tier=rarityTier(spec);
+            meta.setDisplayName(gradient(specName(spec),tier));
+            meta.setLore(List.of("§7"+specDescription(spec),"","§7Предмет: §f"+appliesTo(spec),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
-                "§7Уровни: §f"+(s.leveled()?"I–"+roman(maxLevel(s)):"Без уровней"),
-                "",s.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
-            m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
-            icon.setItemMeta(m); inv.setItem(i,icon);
+                "§7Уровни: §f"+(spec.leveled()?"I–"+roman(maxLevel(spec)):"Без уровней"),
+                "",spec.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
+            meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,spec.key());
+            icon.setItemMeta(meta); inv.setItem(i,icon);
         }
-
+        ItemStack back=new ItemStack(Material.ARROW); ItemMeta bm=back.getItemMeta();
+        bm.setDisplayName("§d← Выбор предмета"); bm.setLore(List.of("§7Вернуться к категориям"));
+        back.setItemMeta(bm); inv.setItem(45,back);
         ItemStack previous=new ItemStack(page>0?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta pm=previous.getItemMeta();
-        pm.setDisplayName(page>0?"§d← Предыдущая страница":"§8Первая страница");
-        pm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        pm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.max(0,page-1));
-        previous.setItemMeta(pm); inv.setItem(45,previous);
-
-        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
-        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
-
+        ItemMeta pm=previous.getItemMeta(); pm.setDisplayName(page>0?"§d← Назад":"§8Первая страница");
+        pm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.max(0,page-1));
+        pm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category);
+        previous.setItemMeta(pm); inv.setItem(47,previous);
+        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta(); cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
         ItemStack next=new ItemStack(page<maxPage?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta nm=next.getItemMeta();
-        nm.setDisplayName(page<maxPage?"§dСледующая страница →":"§8Последняя страница");
-        nm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        nm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
-        next.setItemMeta(nm); inv.setItem(53,next);
+        ItemMeta nm=next.getItemMeta(); nm.setDisplayName(page<maxPage?"§dДалее →":"§8Последняя страница");
+        nm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
+        nm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category);
+        next.setItemMeta(nm); inv.setItem(51,next);
+        ItemStack heading=new ItemStack(selectedCategory.icon()); ItemMeta hm=heading.getItemMeta();
+        hm.setDisplayName("§d§l"+selectedCategory.title());
+        hm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
+        heading.setItemMeta(hm); inv.setItem(53,heading);
         p.openInventory(inv);
     }
     private void openLevelMenu(Player p,Spec s) {
@@ -732,7 +783,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     @EventHandler public void onCatalogDrag(InventoryDragEvent e) {
         String title = e.getView().getTitle();
-        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
+        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE) || title.equals(CATEGORY_TITLE)) e.setCancelled(true);
     }
 
     @EventHandler public void onCatalog(InventoryClickEvent e) {
@@ -759,6 +810,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             }
             openAdmin(p); return;
         }
+        if(title.equals(CATEGORY_TITLE)) {
+            e.setCancelled(true);
+            if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
+            ItemStack clicked=e.getCurrentItem(); if(clicked==null || clicked.getType()==Material.AIR) return;
+            if(e.getRawSlot()==49) { p.closeInventory(); return; }
+            String category=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+            if(category!=null) { p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f); openCatalog(p,category,0); }
+            return;
+        }
         if(title.equals(LEVEL_TITLE)) {
             e.setCancelled(true);
             if (!p.hasPermission("voidenchants.admin")) {
@@ -770,7 +830,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             ItemStack clicked=e.getCurrentItem();
             if(clicked==null || clicked.getType()==Material.AIR) return;
             if(e.getRawSlot()==26) { p.closeInventory(); return; }
-            if(e.getRawSlot()==18) { openCatalog(p,0); return; }
+            if(e.getRawSlot()==18) { openCategories(p); return; }
             Spec selected=findSpec(id(clicked));
             if(selected==null || !selected.leveled()) return;
             int lvl=level(clicked);
@@ -796,11 +856,13 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack clicked=e.getCurrentItem();
         if(clicked==null || clicked.getType()==Material.AIR) return;
         if(e.getRawSlot()==49 && clicked.getType()==Material.BARRIER) { p.closeInventory(); return; }
-        if(e.getRawSlot()==45 || e.getRawSlot()==53) {
-            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
-            if(targetPage!=null) {
+        if(e.getRawSlot()==45) { openCategories(p); return; }
+        if(e.getRawSlot()==47 || e.getRawSlot()==51) {
+            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+            String category=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+            if(targetPage!=null && category!=null) {
                 p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f);
-                openCatalog(p,targetPage);
+                openCatalog(p,category,targetPage);
             }
             return;
         }
