@@ -401,7 +401,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); playEnchantSound(p,key,l); }
             default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); playEnchantSound(p,key,l); }
         }
-        if(Set.of("vampirism","bloodsucker","frost","venom","execution","thunder","dragonbreath","berserk","godslayer","worldeater","blackhole","phantomblade","shadow","immortality","reflection","secondwind","unbreakable","lightaura","titanshield").contains(key)) animateCombatEffect(p,key,l);\n        Color signature = switch(key) {
+        if(Set.of("vampirism","bloodsucker","frost","venom","execution","thunder","dragonbreath","berserk","godslayer","worldeater","blackhole","phantomblade","shadow","immortality","reflection","secondwind","unbreakable","lightaura","titanshield").contains(key)) animateCombatEffect(p,key,l);
+        Color signature = switch(key) {
             case "venom","immunity" -> Color.fromRGB(93,220,104);
             case "execution" -> Color.fromRGB(255,126,48);
             case "thunder","stun","experience" -> Color.fromRGB(255,226,92);
