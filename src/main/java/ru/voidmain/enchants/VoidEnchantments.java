@@ -322,25 +322,25 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private void playEnchantSound(Player player,String key,Location location) {
         String sound="voidmain:enchant_"+key;
-        String layer=null;
+        String layer=null, secondLayer=null;
         float volume=0.8f, pitch=1.0f;
         switch(key) {
-            case "godslayer" -> { volume=3.0f; pitch=0.78f; layer="minecraft:block.beacon.activate"; }
-            case "worldeater" -> { volume=3.0f; pitch=0.72f; layer="minecraft:entity.ender_dragon.growl"; }
-            case "blackhole" -> { volume=1.7f; pitch=0.75f; layer="minecraft:entity.enderman.teleport"; }
-            case "thunder" -> { volume=1.8f; pitch=0.82f; layer="minecraft:entity.lightning_bolt.thunder"; }
+            case "godslayer" -> { volume=3.0f; pitch=0.78f; layer="minecraft:block.beacon.activate"; secondLayer="minecraft:entity.elder_guardian.curse"; }
+            case "worldeater" -> { volume=3.0f; pitch=0.72f; layer="minecraft:entity.ender_dragon.growl"; secondLayer="minecraft:entity.wither.spawn"; }
+            case "blackhole" -> { volume=1.7f; pitch=0.75f; layer="minecraft:entity.enderman.teleport"; secondLayer="minecraft:block.end_portal.spawn"; }
+            case "thunder" -> { volume=1.8f; pitch=0.82f; layer="minecraft:entity.lightning_bolt.thunder"; secondLayer="minecraft:entity.lightning_bolt.impact"; }
             case "dragonbreath" -> { volume=1.55f; pitch=0.8f; layer="minecraft:entity.ender_dragon.growl"; }
             case "lightaura" -> { volume=1.6f; pitch=1.0f; layer="minecraft:block.beacon.activate"; }
             case "immortality" -> { volume=1.6f; pitch=1.0f; layer="minecraft:item.totem.use"; }
             case "moon" -> { volume=0.65f; pitch=1.0f; layer="minecraft:block.amethyst_block.chime"; }
-            case "vampirism","bloodsucker" -> { volume=0.65f; pitch=0.95f; layer="minecraft:entity.player.burp"; }
-            case "frost","waterwalker" -> { volume=0.7f; pitch=1.15f; layer="minecraft:block.glass.break"; }
-            case "venom" -> { volume=0.75f; pitch=0.9f; layer="minecraft:entity.spider.ambient"; }
+            case "vampirism","bloodsucker" -> { volume=0.65f; pitch=0.95f; layer="minecraft:entity.player.burp"; secondLayer="minecraft:entity.warden.heartbeat"; }
+            case "frost","waterwalker" -> { volume=0.7f; pitch=1.15f; layer="minecraft:block.glass.break"; secondLayer="minecraft:block.amethyst_block.chime"; }
+            case "venom" -> { volume=0.75f; pitch=0.9f; layer="minecraft:entity.spider.ambient"; secondLayer="minecraft:block.pointed_dripstone.drip_lava"; }
             case "berserk" -> { volume=1.0f; pitch=0.9f; layer="minecraft:entity.ravager.roar"; }
-            case "execution" -> { volume=1.0f; pitch=0.8f; layer="minecraft:block.anvil.land"; }
+            case "execution" -> { volume=1.0f; pitch=0.8f; layer="minecraft:block.anvil.land"; secondLayer="minecraft:item.trident.hit"; }
             case "spear_dash","aerodynamics" -> { volume=0.85f; pitch=1.1f; layer="minecraft:entity.player.attack.sweep"; }
-            case "bounce","doublejump" -> { volume=0.9f; pitch=1.15f; layer="minecraft:entity.slime.jump"; }
-            case "hook" -> { volume=0.9f; pitch=0.95f; layer="minecraft:entity.fishing_bobber.retrieve"; }
+            case "bounce","doublejump" -> { volume=0.9f; pitch=1.15f; layer="minecraft:entity.slime.jump"; secondLayer="minecraft:block.slime_block.fall"; }
+            case "hook" -> { volume=0.9f; pitch=0.95f; layer="minecraft:entity.fishing_bobber.retrieve"; secondLayer="minecraft:entity.arrow.shoot"; }
             case "phantomblade","shadow" -> { volume=0.85f; pitch=1.0f; layer="minecraft:entity.phantom.ambient"; }
             case "titanshield" -> { volume=1.0f; pitch=0.8f; layer="minecraft:item.shield.block"; }
             case "reflection" -> { volume=0.9f; pitch=1.1f; layer="minecraft:item.shield.block"; }
@@ -352,7 +352,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "magnet","experience" -> { volume=0.7f; pitch=1.2f; layer="minecraft:entity.experience_orb.pickup"; }
             case "woodcutter" -> { volume=0.85f; pitch=0.9f; layer="minecraft:block.wood.break"; }
             case "drill","veinminer","haste","autosmelt" -> { volume=0.8f; pitch=0.9f; layer="minecraft:block.deepslate.break"; }
-            case "wings","hover" -> { volume=0.7f; pitch=1.0f; layer="minecraft:item.elytra.flying"; }
+            case "wings","hover" -> { volume=0.7f; pitch=1.0f; layer="minecraft:item.elytra.flying"; secondLayer="minecraft:entity.phantom.flap"; }
             default -> { volume=0.8f; pitch=1.0f; }
         }
         if(key.equals("moon") && location.getWorld()!=null) {
@@ -364,11 +364,11 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             for(Player viewer:Bukkit.getOnlinePlayers()) {
                 Location at=viewer.getLocation();
                 viewer.playSound(at,sound,volume,pitch);
-                if(layer!=null) viewer.playSound(at,layer,volume*0.75f,pitch);
+                if(layer!=null) viewer.playSound(at,layer,volume*0.75f,pitch);\n                if(secondLayer!=null) viewer.playSound(at,secondLayer,volume*0.55f,pitch);
             }
         } else {
             player.playSound(location,sound,volume,pitch);
-            if(layer!=null) player.playSound(location,layer,volume*0.75f,pitch);
+            if(layer!=null) player.playSound(location,layer,volume*0.75f,pitch);\n            if(secondLayer!=null) player.playSound(location,secondLayer,volume*0.55f,pitch);
         }
     }
 
