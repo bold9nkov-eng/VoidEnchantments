@@ -131,3 +131,281 @@ admin-enchants:
   obtainable-from-drops: false
   creator-block-chance: 0.10
   creator-blocks: []
+# Настройки каждого зачарования. Можно менять имя, описание, максимальный уровень и редкость.
+# rarity-tier: 0=админское, 1=божественное, 2=легендарное, 3=эпическое, 4=редкое, 5=необычное
+enchantments:
+  magnet:
+    name: "Магнит"
+    description: "Добытые предметы притягиваются прямо в инвентарь"
+    max-level: 1
+    rarity-tier: 4
+  woodcutter:
+    name: "Дровосек"
+    description: "Ломает связанные брёвна дерева"
+    max-level: 1
+    rarity-tier: 3
+  cleave:
+    name: "Раскол"
+    description: "Шанс 15% наложить Слабость на 5 секунд"
+    max-level: 1
+    rarity-tier: 2
+  stun:
+    name: "Оглушение"
+    description: "Каждый третий удар оглушает на 1,5 секунды"
+    max-level: 1
+    rarity-tier: 1
+  heaviness:
+    name: "Тяжесть"
+    description: "Каждый второй удар замедляет на 1 секунду"
+    max-level: 1
+    rarity-tier: 3
+  axemaster:
+    name: "Мастер топора"
+    description: "Игнорирует броню: I 5%, II 10%, III 15%"
+    max-level: 3
+    rarity-tier: 3
+  fish:
+    name: "Рыба"
+    description: "Позволяет дышать под водой"
+    max-level: 1
+    rarity-tier: 2
+  drill:
+    name: "Бур"
+    description: "Разрушает область 3×3×3"
+    max-level: 1
+    rarity-tier: 2
+  autosmelt:
+    name: "Автоплавка"
+    description: "Автоматически переплавляет руду"
+    max-level: 1
+    rarity-tier: 4
+  veinminer:
+    name: "Цепная добыча"
+    description: "Добывает связанную рудную жилу"
+    max-level: 1
+    rarity-tier: 3
+  haste:
+    name: "Скорокоп"
+    description: "Ускорение добычи"
+    max-level: 3
+    rarity-tier: 5
+  experience:
+    name: "Опытный"
+    description: "Увеличивает опыт с руды"
+    max-level: 4
+    rarity-tier: 4
+  vampirism:
+    name: "Вампиризм"
+    description: "Каждый пятый удар восстанавливает здоровье"
+    max-level: 2
+    rarity-tier: 2
+  frost:
+    name: "Ледяной клинок"
+    description: "Каждый третий удар замедляет цель"
+    max-level: 1
+    rarity-tier: 4
+  venom:
+    name: "Веном"
+    description: "Каждый третий удар отравляет цель"
+    max-level: 1
+    rarity-tier: 4
+  execution:
+    name: "Казнь"
+    description: "Урон ×2 по цели с менее 30% здоровья"
+    max-level: 1
+    rarity-tier: 1
+  thunder:
+    name: "Тор"
+    description: "Улучшенная молния с шансом 20%"
+    max-level: 1
+    rarity-tier: 1
+  dragonbreath:
+    name: "Дыхание дракона"
+    description: "Шанс тошноты у атакующего"
+    max-level: 1
+    rarity-tier: 3
+  sneak:
+    name: "Скороход"
+    description: "При Shift сохраняет обычную скорость ходьбы и бега"
+    max-level: 1
+    rarity-tier: 5
+  diver:
+    name: "Водолаз"
+    description: "Увеличивает скорость плавания"
+    max-level: 3
+    rarity-tier: 5
+  immunity:
+    name: "Иммунитет"
+    description: "Шанс снять отрицательные эффекты"
+    max-level: 1
+    rarity-tier: 4
+  softsteps:
+    name: "Мягкие лапки"
+    description: "Снижает урон от падения"
+    max-level: 3
+    rarity-tier: 4
+  lavawalker:
+    name: "Лавоход"
+    description: "Создаёт обсидиан под ногами на 4 секунды"
+    max-level: 1
+    rarity-tier: 3
+  owl:
+    name: "Сова"
+    description: "Ночное зрение"
+    max-level: 1
+    rarity-tier: 5
+  sniper:
+    name: "Снайпер"
+    description: "Усиливает дальний бой из лука"
+    max-level: 3
+    rarity-tier: 2
+  wisdom:
+    name: "Мудрость"
+    description: "Увеличивает получаемый опыт"
+    max-level: 1
+    rarity-tier: 5
+  wings:
+    name: "Крылья"
+    description: "Прыжок в элитрах восстанавливает 30% прочности"
+    max-level: 1
+    rarity-tier: 1
+  hover:
+    name: "Парение"
+    description: "Shift позволяет зависать в воздухе"
+    max-level: 1
+    rarity-tier: 3
+  blackhole:
+    name: "Чёрная дыра"
+    description: "Каждый второй удар булавой обездвиживает цель на 2 секунды"
+    max-level: 1
+    rarity-tier: 1
+  phantomblade:
+    name: "Призрачный клинок"
+    description: "После удара становишься невидимым на 5 секунд"
+    max-level: 1
+    rarity-tier: 3
+  radar:
+    name: "Радар"
+    description: "Отмечает игроков и мобов в радиусе 20 блоков визуальными метками"
+    max-level: 1
+    rarity-tier: 4
+  aerodynamics:
+    name: "Аэродинамика"
+    description: "Убирает урон от столкновения с блоками при полёте"
+    max-level: 1
+    rarity-tier: 3
+  spear_dash:
+    name: "Рыцарь"
+    description: "Рывок копьём не расходует голод"
+    max-level: 1
+    rarity-tier: 1
+  shadow:
+    name: "Тень"
+    description: "Если стоять в приседе 5 секунд — невидимость до движения"
+    max-level: 1
+    rarity-tier: 2
+  doublejump:
+    name: "Двойной прыжок"
+    description: "Второй прыжок в воздухе; перезарядка 40 секунд"
+    max-level: 1
+    rarity-tier: 3
+  hook:
+    name: "Крюк"
+    description: "ПКМ притягивает врага в радиусе 5 блоков и отравляет на 5 секунд"
+    max-level: 1
+    rarity-tier: 2
+  armorbreaker:
+    name: "Сокрушитель брони"
+    description: "Игнорирует часть брони: I 10%, II 15%, III 25%"
+    max-level: 3
+    rarity-tier: 3
+  bounce:
+    name: "Отскок"
+    description: "ПКМ с булавой подбрасывает вверх примерно на 25 блоков"
+    max-level: 1
+    rarity-tier: 1
+  waterwalker:
+    name: "Водоход"
+    description: "Создаёт синий лёд под ногами на 3 секунды"
+    max-level: 1
+    rarity-tier: 4
+  moon:
+    name: "Луна"
+    description: "Ночью +30% урона, днём −30% урона"
+    max-level: 1
+    rarity-tier: 2
+  chameleon:
+    name: "Хамелеон"
+    description: "Эффекты зависят от биома"
+    max-level: 1
+    rarity-tier: 1
+  berserk:
+    name: "Берсерк"
+    description: "Скорость атаки топором растёт при низком здоровье"
+    max-level: 1
+    rarity-tier: 2
+  godslayer:
+    name: "Убийца Богов"
+    description: "Наносит двойной урон игрокам"
+    max-level: 1
+    rarity-tier: 0
+  worldeater:
+    name: "Пожиратель Миров"
+    description: "Удар булавой с высоты: двойной урон и +2 сердца"
+    max-level: 1
+    rarity-tier: 0
+  immortality:
+    name: "Бессмертие"
+    description: "Смертельный удар оставляет 1 сердце; защита 2 секунды"
+    max-level: 1
+    rarity-tier: 0
+  creatorhand:
+    name: "Длань Творца"
+    description: "Позволяет разрушать бедрок и барьеры"
+    max-level: 1
+    rarity-tier: 0
+  reflection:
+    name: "Отражение"
+    description: "Отражает 15% заблокированного урона"
+    max-level: 1
+    rarity-tier: 3
+  secondwind:
+    name: "Второе дыхание"
+    description: "При блоке на низком здоровье даёт регенерацию II"
+    max-level: 1
+    rarity-tier: 2
+  unbreakable:
+    name: "Не ломаемый"
+    description: "Щит выдерживает пять ударов топором"
+    max-level: 1
+    rarity-tier: 1
+  lightaura:
+    name: "Аура света"
+    description: "Ослепляет, отравляет и ранит врагов при блоке"
+    max-level: 3
+    rarity-tier: 1
+  shove:
+    name: "Толчок"
+    description: "Отбрасывает атакующего при блоке"
+    max-level: 3
+    rarity-tier: 3
+  bloodsucker:
+    name: "Кровопийца"
+    description: "Восстанавливает здоровье при блоке"
+    max-level: 3
+    rarity-tier: 2
+  titanshield:
+    name: "Щит Титана"
+    description: "Блокирует удар щитом независимо от направления"
+    max-level: 1
+    rarity-tier: 1
+
+# Цвета градиента по rarity-tier (можно менять на любые HEX-цвета).
+style:
+  gradients:
+    "0": ["#FF2337", "#FF7788", "#FFFFFF"]
+    "1": ["#FF2337", "#FF7788", "#FFFFFF"]
+    "2": ["#FF8719", "#FFD28A", "#FFFFFF"]
+    "3": ["#A537FF", "#D5A5FF", "#FFFFFF"]
+    "4": ["#23AAFF", "#BCEBFF", "#FFFFFF"]
+    "5": ["#2DCD69", "#BFF5D4", "#FFFFFF"]
