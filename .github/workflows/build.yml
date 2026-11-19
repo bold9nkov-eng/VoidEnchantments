@@ -1,7 +1,9 @@
 name: Build VoidEnchantments
 on:
-  push:
+  pull_request:
     branches: [main]
+  push:
+    branches: [main, feature/voidenchantments-3.2.0, feature/voidenchantments-3.3.0-galaxy-menu]
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,12 +18,12 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Build
-        run: mvn -B clean package
+        run: mvn -B package
       - name: Verify JAR
-        run: test -f target/VoidEnchantments-2.1.2.jar
+        run: test -f target/VoidEnchantments-3.3.0.jar
       - uses: actions/upload-artifact@v5
         with:
-          name: VoidEnchantments-2.1.2
-          path: target/VoidEnchantments-2.1.2.jar
+          name: VoidEnchantments-3.3.0
+          path: target/VoidEnchantments-3.3.0.jar
           if-no-files-found: error
           retention-days: 30

@@ -1,5 +1,5 @@
 name: VoidEnchantments
-version: 2.1.2
+version: 3.3.0
 main: ru.voidmain.enchants.VoidEnchantments
 api-version: '1.21'
 depend: [packetevents]
@@ -8,7 +8,7 @@ commands:
   voidenchants:
     aliases: [ve, enchants]
     description: Каталог и управление кастомными зачарованиями VoidMain
-    usage: /enchants [list|info|apply] или /ve [help|give|giveall|remove|strip|book|adminbook|reload|debug|drops|admin]
+    usage: /enchants [list|info|apply] или /ve [help|effects|history|give|giveall|remove|strip|book|adminbook|reload|debug|drops|admin]
 permissions:
   voidenchants.admin:
     description: Доступ к административным командам и панели VoidEnchantments

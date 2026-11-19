@@ -18,6 +18,8 @@ import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
 import org.bukkit.event.world.LootGenerateEvent;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.*;
 import org.bukkit.persistence.PersistentDataType;
@@ -30,6 +32,8 @@ import java.util.*;
 public final class VoidEnchantments extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
     private NamespacedKey enchantKey;
     private NamespacedKey levelKey;
+    private NamespacedKey categoryKey;
+    private NamespacedKey pageKey;
     private final Set<UUID> drilling = new HashSet<>();
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
@@ -39,19 +43,36 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private final Map<UUID, Double> sneakSpeeds = new HashMap<>(), berserkBase = new HashMap<>();
     private final Map<UUID, Long> doubleJumpCooldown = new HashMap<>(), shadowSince = new HashMap<>();
     private final Map<String,Long> procCooldowns=new HashMap<>();
+    private final Map<String,Long> procCooldownDurations=new HashMap<>();
+    private final Map<UUID, Deque<String>> activationHistory = new HashMap<>();
+    private final Map<UUID, Boolean> effectsEnabled = new HashMap<>();
+    private final Map<UUID, Map<String,Integer>> awakeningCounts = new HashMap<>();
+    private final Set<String> cooldownHudKeys=Set.of("hook","bounce","doublejump","immortality","titanshield","bloodsucker","shove","lightaura","secondwind");
     private final Map<UUID,Integer> shieldAxeHits=new HashMap<>();
     private final Set<UUID> treeBreaking=new HashSet<>();
     private final Map<UUID, Location> shadowPositions = new HashMap<>();
     private final Map<UUID, Integer> shadowTasks = new HashMap<>();
     private final Set<Location> lavaBlocks = new HashSet<>();
-    private final Set<Location> creatorBlocks = new HashSet<>();
     private final Set<UUID> wingsJumping = new HashSet<>();
     private final Map<String, Integer> villagerBookDrops = new HashMap<>();
     private static final String ADMIN_TITLE = "§0✦ §5VoidMain §8| §cАдмин-панель";
     private static final String CATALOG_TITLE = "§0✦ §5VoidMain §8| §dЗачарования";
     private static final String LEVEL_TITLE = "§0✦ §5VoidMain §8| §dВыбор уровня";
+    private static final String CATEGORY_TITLE = "§0✦ §5VoidMain §8| §dВыбор предмета";
 
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
+    private record Category(String key, String title, Material icon) {}
+    private final List<Category> categories = List.of(
+        new Category("swords","МЕЧИ",Material.NETHERITE_SWORD),
+        new Category("axes","ТОПОРЫ",Material.NETHERITE_AXE),
+        new Category("mace","БУЛАВА",Material.MACE),
+        new Category("pickaxes","КИРКИ",Material.NETHERITE_PICKAXE),
+        new Category("armor","БРОНЯ",Material.DIAMOND_CHESTPLATE),
+        new Category("shields","ЩИТЫ",Material.SHIELD),
+        new Category("bows","ЛУКИ",Material.BOW),
+        new Category("spears","КОПЬЯ",Material.TRIDENT),
+        new Category("elytra","ЭЛИТРЫ",Material.ELYTRA)
+    );
     private final List<Spec> specs = List.of(
         new Spec("magnet","Магнит","Добытые предметы притягиваются прямо в инвентарь",Material.IRON_INGOT,1,false),
         new Spec("woodcutter","Дровосек","Ломает связанные брёвна дерева",Material.IRON_AXE,1,false),
@@ -93,12 +114,11 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
         new Spec("bounce","Отскок","ПКМ с булавой подбрасывает вверх примерно на 25 блоков",Material.MACE,1,false),
         new Spec("waterwalker","Водоход","Создаёт синий лёд под ногами на 3 секунды",Material.BLUE_ICE,1,false),
 new Spec("moon","Луна","Ночью +30% урона, днём −30% урона",Material.CLOCK,1,false),
-new Spec("chameleon","Хамелеон","Эффекты зависят от биома",Material.TURTLE_HELMET,1,false),
+
 new Spec("berserk","Берсерк","Скорость атаки топором растёт при низком здоровье",Material.IRON_AXE,1,false),
 new Spec("godslayer","Убийца Богов","Наносит двойной урон игрокам",Material.NETHERITE_SWORD,1,false),
 new Spec("worldeater","Пожиратель Миров","Удар булавой с высоты: двойной урон и +2 сердца",Material.MACE,1,false),
 new Spec("immortality","Бессмертие","Смертельный удар оставляет 1 сердце; защита 2 секунды",Material.TOTEM_OF_UNDYING,1,false),
-new Spec("creatorhand","Длань Творца","Позволяет разрушать бедрок и барьеры",Material.BEDROCK,1,false),
 new Spec("reflection","Отражение","Отражает 15% заблокированного урона",Material.SHIELD,1,false),
 new Spec("secondwind","Второе дыхание","При блоке на низком здоровье даёт регенерацию II",Material.GHAST_TEAR,1,false),
 new Spec("unbreakable","Не ломаемый","Щит выдерживает пять ударов топором",Material.SHIELD,1,false),
@@ -112,19 +132,23 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @Override public void onEnable() {
         enchantKey = new NamespacedKey(this,"custom_enchant");
         levelKey = new NamespacedKey(this,"custom_level");
+        categoryKey = new NamespacedKey(this,"catalog_category");
+        pageKey = new NamespacedKey(this,"catalog_page");
         for (Spec s : specs) if (!s.leveled()) singleTier.add(s.key());
         getServer().getPluginManager().registerEvents(this,this);
         Objects.requireNonNull(getCommand("voidenchants")).setExecutor(this);
         Objects.requireNonNull(getCommand("voidenchants")).setTabCompleter(this);
         getConfig().options().copyDefaults(true);
         saveDefaultConfig();
-        loadCreatorBlocks();
         Bukkit.getScheduler().runTaskTimer(this,()->Bukkit.getOnlinePlayers().forEach(p->{updateCooldownBar(p); refreshDiver(p); if(has(p,"berserk") && held(p).getType().name().endsWith("_AXE")) updateBerserk(p); else resetBerserk(p);}),5L,5L);
         saveConfig();
         getLogger().info("VoidEnchantments enabled: "+specs.size()+" enchantments");
     }
 
     private Spec spec(String key) { return specs.stream().filter(s -> s.key().equalsIgnoreCase(key)).findFirst().orElse(null); }
+    private String specName(Spec s) { return getConfig().getString("enchantments."+s.key()+".name",s.name()); }
+    private String specDescription(Spec s) { return getConfig().getString("enchantments."+s.key()+".description",s.lore()); }
+    private int maxLevel(Spec s) { return Math.max(1,Math.min(10,getConfig().getInt("enchantments."+s.key()+".max-level",s.max()))); }
     private NamespacedKey itemEnchantKey(String key) { return new NamespacedKey(this, "ce_" + key); }
     private Set<String> enchantKeys(ItemStack item) {
         Set<String> keys=new LinkedHashSet<>();
@@ -155,15 +179,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Integer n = item.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
         return n == null ? 1 : n;
     }
-    private int rarityTier(Spec s) { return switch(s.key()) {
-        case "godslayer","worldeater","immortality","creatorhand" -> 0;
+    private int rarityTier(Spec s) { int fallback = switch(s.key()) {
+        case "godslayer","worldeater","immortality" -> 0;
         case "thunder","lightaura" -> 1;
         case "blackhole","spear_dash","stun" -> 1;
         case "shadow","hook","cleave","fish" -> 2;
         case "armorbreaker","axemaster","doublejump","woodcutter","heaviness" -> 3;
         case "bounce" -> 1;
         case "waterwalker" -> 4;
-        case "chameleon","unbreakable","titanshield" -> 1;
+        case "unbreakable","titanshield" -> 1;
         case "reflection","shove" -> 3;
         case "secondwind","bloodsucker","berserk" -> 2;
         case "moon" -> 2;
@@ -172,9 +196,10 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "wings","execution" -> 1;
         case "drill","vampirism","sniper" -> 2;
         case "veinminer","hover","lavawalker","dragonbreath" -> 3;
+        case "diver" -> 3;
         case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
         default -> 5;
-    }; }
+    }; return Math.max(0,Math.min(5,getConfig().getInt("enchantments."+s.key()+".rarity-tier",fallback))); }
     private String rarityName(int t) { return switch(t) {
         case 0 -> "АДМИНСКОЕ"; case 1 -> "Божественное"; case 2 -> "Легендарное"; case 3 -> "Эпическое"; case 4 -> "Редкое"; default -> "Необычное";
     }; }
@@ -184,10 +209,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private String appliesTo(Spec s) { return switch(s.key()) {
         case "magnet" -> "Кирка, лопата или топор";
         case "moon","godslayer" -> "Меч";
-        case "chameleon","immortality" -> "Нагрудник";
+        case "immortality" -> "Нагрудник";
         case "berserk" -> "Топор";
         case "worldeater" -> "Булава";
-        case "creatorhand" -> "Кирка";
         case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> "Щит";
         case "woodcutter","cleave","stun","heaviness","axemaster" -> "Топор";
         case "fish" -> "Шлем";
@@ -209,8 +233,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta m = item.getItemMeta();
         int tier=rarityTier(s);
-        m.setDisplayName(gradient(s.name(),tier));
-        m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+        m.setDisplayName(gradient(specName(s),tier));
+        m.setItemModel(NamespacedKey.fromString("voidmain:scroll_tier_"+tier));
+        m.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
             "§7Редкость: "+rarityColor(tier)+rarityName(tier),
             "§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
         m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
@@ -249,45 +274,226 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private long cooldownLeft(UUID uuid,String key) { return Math.max(0L,procCooldowns.getOrDefault(uuid+":"+key,0L)-System.currentTimeMillis()); }
     private void updateCooldownBar(Player p) {
         if(!getConfig().getBoolean("cooldowns.actionbar.enabled",true)) return;
-        List<String> lines=new ArrayList<>();
+        List<String> active=new ArrayList<>();
         for(Spec sp:specs) {
+            if(!cooldownHudKeys.contains(sp.key())) continue;
+            String id=p.getUniqueId()+":"+sp.key();
             long left=cooldownLeft(p.getUniqueId(),sp.key());
-            if(left>0 && has(p,sp.key())) lines.add(getConfig().getString("cooldowns.actionbar.format","§d{enchant}: §f{seconds}с").replace("{enchant}",sp.name()).replace("{seconds}",String.valueOf((left+999)/1000)));
+            if(left<=0 || !has(p,sp.key())) continue;
+            long total=Math.max(left,procCooldownDurations.getOrDefault(id,left));
+            int filled=Math.max(0,Math.min(10,(int)Math.round((1.0-(double)left/total)*10.0)));
+            String bar="§d"+"▰".repeat(filled)+"§8"+"▱".repeat(10-filled);
+            active.add("§5✦ "+gradient(specName(sp),rarityTier(sp))+" §8["+bar+"§8] §f"+String.format(Locale.US,"%.1f",left/1000.0)+"с");
         }
-        p.sendActionBar(Component.text(lines.isEmpty()?"":String.join(getConfig().getString("cooldowns.actionbar.separator"," §8| "),lines)));
+        int maxVisible=Math.max(1,Math.min(4,getConfig().getInt("cooldowns.actionbar.max-visible",2)));
+        String output=active.isEmpty()?"":String.join(" §8◆ ",active.subList(0,Math.min(maxVisible,active.size())));
+        if(active.size()>maxVisible) output+=" §8+"+(active.size()-maxVisible);
+        p.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(output));
     }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
-    private double dropChance(Spec s) { return Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); }
+    private double dropChance(Spec s) { double weight=Math.max(0,Math.min(100,getConfig().getDouble("drop-chance."+s.key(),defaultDropChance(s)))); return switch(rarityTier(s)) { case 1 -> weight/4.0; case 2 -> weight/2.5; case 3 -> weight/1.5; default -> weight; }; }
     private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key()) && rarityTier(x)>0).mapToDouble(this::dropChance).sum(); }
     private String chanceText(Spec s) { if(rarityTier(s)==0) return "только админам"; double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
-    private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
-    private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;switch(key) {
-        case "moon" -> {w.spawnParticle(Particle.END_ROD,l,12,.3,.5,.3,.02);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.8f,1.8f);}
-        case "chameleon" -> {w.spawnParticle(Particle.HAPPY_VILLAGER,l,20,.4,.5,.4,.03);p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.8f,1.2f);}
-        case "berserk" -> {w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.5f,1.4f);}
-        case "godslayer","worldeater" -> {w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,30,.5,.6,.5,.04);p.playSound(l,Sound.ENTITY_WITHER_HURT,.8f,.7f);}
-        case "immortality" -> {w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08);p.playSound(l,Sound.ITEM_TOTEM_USE,1f,1f);}
-        case "creatorhand" -> {w.spawnParticle(Particle.END_ROD,l,24,.4,.5,.4,.04);p.playSound(l,Sound.BLOCK_BEACON_ACTIVATE,.8f,1.4f);}
-        case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> {w.spawnParticle(Particle.FLASH,l,1,0,0,0,0);w.spawnParticle(Particle.ENCHANT,l,28,.5,.5,.5,.6);p.playSound(l,Sound.ITEM_SHIELD_BLOCK,.9f,1.3f);}
-        case "woodcutter" -> {w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f);}
-        case "cleave","axemaster" -> {w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.3,.4,.3,0);p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.9f,.8f);}
-        case "stun" -> {w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_ANVIL_LAND,.8f,1.5f);}
-        case "heaviness" -> {w.spawnParticle(Particle.BLOCK,l,20,.3,.4,.3,.1,Material.ANVIL.createBlockData());p.playSound(l,Sound.BLOCK_CHAIN_HIT,.8f,.7f);}
-        case "fish","diver" -> {w.spawnParticle(Particle.BUBBLE,l,20,.4,.5,.4,.04);p.playSound(l,Sound.ENTITY_DOLPHIN_SPLASH,.7f,1.3f);}
-        case "magnet" -> {w.spawnParticle(Particle.ENCHANT,l,16,.3,.4,.3,.6);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.7f,1.7f);}
-        case "lavawalker" -> {w.spawnParticle(Particle.FLAME,l,18,.5,.1,.5,.02);p.playSound(l,Sound.BLOCK_PORTAL_AMBIENT,.5f,.8f);}
-        case "waterwalker" -> {w.spawnParticle(Particle.SPLASH,l,20,.5,.2,.5,.1);p.playSound(l,Sound.BLOCK_GLASS_PLACE,.8f,1.6f);}
-        case "blackhole" -> {w.spawnParticle(Particle.PORTAL,l,45,.5,.7,.5,.3);w.spawnParticle(Particle.REVERSE_PORTAL,l,25,.4,.6,.4,.1);p.playSound(l,Sound.BLOCK_BEACON_DEACTIVATE,.8f,.55f);}
-        case "hook" -> {w.spawnParticle(Particle.CRIT,l,18,.3,.5,.3,.1);p.playSound(l,Sound.ENTITY_FISHING_BOBBER_RETRIEVE,.9f,.8f);}
-        case "bounce","doublejump","wings" -> {w.spawnParticle(Particle.CLOUD,l,24,.4,.2,.4,.08);p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.8f,1.4f);}
-        case "thunder" -> {w.spawnParticle(Particle.ELECTRIC_SPARK,l,35,.5,.7,.5,.2);p.playSound(l,Sound.ENTITY_LIGHTNING_BOLT_THUNDER,.8f,1.4f);}
-        case "phantomblade","shadow" -> {w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03);p.playSound(l,Sound.ENTITY_ENDERMAN_TELEPORT,.65f,1.6f);}
-        case "frost" -> {w.spawnParticle(Particle.SNOWFLAKE,l,20,.3,.5,.3,.04);p.playSound(l,Sound.BLOCK_GLASS_BREAK,.7f,1.7f);}
-        case "venom","immunity" -> {w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02);p.playSound(l,Sound.ENTITY_WITCH_AMBIENT,.6f,1.6f);}
-        case "dragonbreath" -> {w.spawnParticle(Particle.DRAGON_BREATH,l,24,.4,.5,.4,.02);p.playSound(l,Sound.ENTITY_ENDER_DRAGON_GROWL,.5f,1.6f);}
-        case "vampirism" -> {w.spawnParticle(Particle.HEART,l,10,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.55f,1.5f);}
-        default -> {w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.6f,1.2f);}
-    }}
+    private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);procCooldownDurations.put(k,Math.max(1L,ms));return true;}
+    private void spawnVoidRing(Location center,double radius,Color color,int points) {
+        World world=center.getWorld(); if(world==null)return;
+        Particle.DustOptions dust=new Particle.DustOptions(color,1.15f);
+        for(int i=0;i<points;i++) {
+            double angle=Math.PI*2.0*i/points;
+            world.spawnParticle(Particle.DUST,center.clone().add(Math.cos(angle)*radius,.12,Math.sin(angle)*radius),1,.01,.01,.01,0,dust);
+        }
+    }
+    private void spawnBloodDrips(LivingEntity entity) {
+        Particle.DustOptions blood=new Particle.DustOptions(Color.fromRGB(156,8,31),1.15f);
+        new BukkitRunnable() {
+            int frame=0;
+            @Override public void run() {
+                if(!entity.isValid() || frame>=10) { cancel(); return; }
+                Location origin=entity.getLocation();
+                for(int i=0;i<4;i++) {
+                    double angle=frame*.62+i*Math.PI*2/4;
+                    Location drop=origin.clone().add(Math.cos(angle)*.27,1.62-frame*.15,Math.sin(angle)*.27);
+                    entity.getWorld().spawnParticle(Particle.DUST,drop,1,.006,.018,.006,0,blood);
+                }
+                entity.getWorld().spawnParticle(Particle.DUST,origin.clone().add(0,.18,0),2,.18,.02,.18,0,blood);
+                frame++;
+            }
+        }.runTaskTimer(this,0L,1L);
+    }
+    private void playEnchantSound(Player player,String key,Location location) {
+        if(location.getWorld()==null) return;
+        String first="minecraft:block.amethyst_block.chime";
+        String second=null;
+        float volume=0.85f, pitch=1.0f;
+        switch(key) {
+            case "godslayer" -> { first="minecraft:block.beacon.activate"; second="minecraft:entity.elder_guardian.curse"; volume=1.15f; pitch=0.72f; }
+            case "worldeater" -> { first="minecraft:entity.warden.sonic_boom"; second="minecraft:entity.ender_dragon.growl"; volume=1.35f; pitch=0.65f; }
+            case "blackhole" -> { first="minecraft:block.end_portal.spawn"; second="minecraft:entity.enderman.teleport"; volume=0.95f; pitch=0.72f; }
+            case "thunder" -> { first="minecraft:entity.lightning_bolt.impact"; second="minecraft:entity.lightning_bolt.thunder"; volume=1.0f; pitch=0.88f; }
+            case "dragonbreath" -> { first="minecraft:entity.ender_dragon.flap"; second="minecraft:entity.blaze.shoot"; pitch=0.78f; }
+            case "lightaura","immortality" -> { first="minecraft:block.beacon.power_select"; second="minecraft:item.totem.use"; volume=0.9f; pitch=1.08f; }
+            case "moon" -> { first="minecraft:block.amethyst_block.chime"; second="minecraft:block.note_block.bell"; pitch=1.35f; }
+            case "vampirism","bloodsucker" -> { first="minecraft:entity.warden.heartbeat"; second="minecraft:entity.player.attack.crit"; pitch=0.82f; }
+            case "frost","waterwalker" -> { first="minecraft:block.glass.break"; second="minecraft:block.amethyst_block.chime"; pitch=1.28f; }
+            case "venom" -> { first="minecraft:entity.spider.ambient"; second="minecraft:block.pointed_dripstone.drip_lava"; pitch=0.92f; }
+            case "berserk" -> { first="minecraft:entity.ravager.roar"; second="minecraft:entity.player.attack.knockback"; pitch=0.82f; }
+            case "execution" -> { first="minecraft:block.anvil.land"; second="minecraft:item.trident.hit"; pitch=0.78f; }
+            case "spear_dash","aerodynamics" -> { first="minecraft:entity.player.attack.sweep"; second="minecraft:entity.ender_dragon.flap"; pitch=1.18f; }
+            case "bounce","doublejump" -> { first="minecraft:entity.slime.jump"; second="minecraft:block.slime_block.fall"; pitch=1.22f; }
+            case "hook" -> { first="minecraft:entity.fishing_bobber.retrieve"; second="minecraft:entity.arrow.shoot"; pitch=1.08f; }
+            case "phantomblade","shadow" -> { first="minecraft:entity.phantom.ambient"; second="minecraft:entity.enderman.teleport"; pitch=0.92f; }
+            case "titanshield","reflection" -> { first="minecraft:item.shield.block"; second="minecraft:block.anvil.land"; pitch=0.82f; }
+            case "secondwind" -> { first="minecraft:entity.player.levelup"; second="minecraft:block.beacon.power_select"; pitch=1.12f; }
+            case "softsteps","sneak" -> { first="minecraft:block.wool.step"; second="minecraft:block.amethyst_block.chime"; volume=0.55f; pitch=1.25f; }
+            case "immunity" -> { first="minecraft:block.fire.extinguish"; second="minecraft:entity.experience_orb.pickup"; pitch=1.18f; }
+            case "lavawalker" -> { first="minecraft:block.lava.pop"; second="minecraft:block.basalt.break"; pitch=0.82f; }
+            case "magnet","experience" -> { first="minecraft:entity.experience_orb.pickup"; second="minecraft:block.amethyst_block.chime"; pitch=1.35f; }
+            case "woodcutter" -> { first="minecraft:block.wood.break"; second="minecraft:block.wood.hit"; pitch=0.9f; }
+            case "drill","veinminer","haste","autosmelt" -> { first="minecraft:block.deepslate.break"; second="minecraft:block.anvil.use"; pitch=0.88f; }
+            case "wings","hover" -> { first="minecraft:item.elytra.flying"; second="minecraft:entity.phantom.flap"; pitch=1.12f; }
+            default -> { first="minecraft:block.amethyst_block.chime"; pitch=1.0f; }
+        }
+        player.playSound(location,first,volume,pitch);
+        if(second!=null) player.playSound(location,second,volume*0.48f,Math.min(2.0f,pitch*1.12f));
+    }
+
+    private void visual(Player p,String key,Location l) {
+        World w=l.getWorld(); if(w==null)return;
+        Spec activated=spec(key);
+        Deque<String> history=activationHistory.computeIfAbsent(p.getUniqueId(),u->new ArrayDeque<>());
+        history.addFirst("§7"+new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date())+" §8• §d"+(activated==null?key:specName(activated)));
+        while(history.size()>10) history.removeLast();
+        if(!effectsEnabled.getOrDefault(p.getUniqueId(),true)) return;
+        int uses=awakeningCounts.computeIfAbsent(p.getUniqueId(),u->new HashMap<>()).merge(key,1,Integer::sum);
+        if(uses==50 || uses==150 || uses==300) {
+            String rank=uses==50?"I":uses==150?"II":"III";
+            p.sendTitle("§5✦ §dПробуждение "+rank,"§f"+(activated==null?key:specName(activated))+" §8• §7"+uses+" активаций",8,45,15);
+            p.playSound(p.getLocation(),Sound.BLOCK_RESPAWN_ANCHOR_CHARGE,.55f,.75f);
+        }
+        switch(key) {
+            case "moon" -> { w.spawnParticle(Particle.END_ROD,l,18,.35,.55,.35,.025); spawnVoidRing(l,.8,Color.fromRGB(222,224,255),24); playEnchantSound(p,key,l); }
+            case "chameleon" -> { w.spawnParticle(Particle.HAPPY_VILLAGER,l,16,.4,.5,.4,.025); w.spawnParticle(Particle.DUST,l,12,.35,.45,.35,0,new Particle.DustOptions(Color.fromRGB(150,93,255),1.1f)); playEnchantSound(p,key,l); }
+            case "berserk" -> { w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02); w.spawnParticle(Particle.CRIT,l,16,.35,.45,.35,.1); playEnchantSound(p,key,l); }
+            case "godslayer","worldeater" -> { w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,26,.45,.6,.45,.035); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); spawnVoidRing(l,1.05,Color.fromRGB(135,39,214),32); spawnVoidRing(l,.62,Color.fromRGB(230,226,255),20); playEnchantSound(p,key,l); }
+            case "immortality" -> { w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08); spawnVoidRing(l,.85,Color.fromRGB(244,221,255),26); playEnchantSound(p,key,l); }
+            case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> { w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); w.spawnParticle(Particle.ENCHANT,l,22,.5,.5,.5,.45); spawnVoidRing(l,.75,Color.fromRGB(161,75,255),24); playEnchantSound(p,key,l); }
+            case "woodcutter" -> { w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1); w.spawnParticle(Particle.BLOCK,l,10,.3,.4,.3,.1,Material.OAK_LOG.createBlockData()); playEnchantSound(p,key,l); }
+            case "cleave","axemaster" -> { w.spawnParticle(Particle.SWEEP_ATTACK,l,4,.35,.4,.35,0); w.spawnParticle(Particle.CRIT,l,14,.3,.45,.3,.08); playEnchantSound(p,key,l); }
+            case "stun" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); playEnchantSound(p,key,l); }
+            case "heaviness" -> { w.spawnParticle(Particle.BLOCK,l,20,.3,.4,.3,.1,Material.ANVIL.createBlockData()); w.spawnParticle(Particle.CLOUD,l,12,.25,.25,.25,.02); playEnchantSound(p,key,l); }
+            case "fish","diver" -> { w.spawnParticle(Particle.BUBBLE,l,22,.4,.5,.4,.04); w.spawnParticle(Particle.SPLASH,l,10,.3,.25,.3,.04); playEnchantSound(p,key,l); }
+            case "magnet" -> { w.spawnParticle(Particle.ENCHANT,l,22,.3,.4,.3,.5); spawnVoidRing(l,.58,Color.fromRGB(189,151,255),20); playEnchantSound(p,key,l); }
+            case "lavawalker" -> { w.spawnParticle(Particle.FLAME,l,18,.5,.1,.5,.02); w.spawnParticle(Particle.LAVA,l,5,.3,.05,.3,0); playEnchantSound(p,key,l); }
+            case "waterwalker" -> { w.spawnParticle(Particle.SPLASH,l,20,.5,.2,.5,.1); w.spawnParticle(Particle.BUBBLE,l,12,.4,.2,.4,.03); playEnchantSound(p,key,l); }
+            case "blackhole" -> { w.spawnParticle(Particle.PORTAL,l,45,.5,.7,.5,.3); w.spawnParticle(Particle.REVERSE_PORTAL,l,28,.4,.6,.4,.12); spawnVoidRing(l,.9,Color.fromRGB(89,24,135),32); playEnchantSound(p,key,l); }
+            case "hook" -> { w.spawnParticle(Particle.CRIT,l,18,.3,.5,.3,.1); w.spawnParticle(Particle.SWEEP_ATTACK,l,2,.2,.2,.2,0); playEnchantSound(p,key,l); }
+            case "bounce","doublejump","wings","hover" -> { w.spawnParticle(Particle.CLOUD,l,24,.4,.2,.4,.08); w.spawnParticle(Particle.END_ROD,l,10,.3,.25,.3,.02); playEnchantSound(p,key,l); }
+            case "thunder" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,35,.5,.7,.5,.2); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); playEnchantSound(p,key,l); }
+            case "phantomblade","shadow" -> { w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03); w.spawnParticle(Particle.REVERSE_PORTAL,l,12,.25,.35,.25,.08); playEnchantSound(p,key,l); }
+            case "frost" -> { w.spawnParticle(Particle.SNOWFLAKE,l,26,.3,.5,.3,.04); spawnVoidRing(l,.7,Color.fromRGB(158,222,255),22); playEnchantSound(p,key,l); }
+            case "venom","immunity" -> { w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02); w.spawnParticle(Particle.DUST,l,12,.3,.45,.3,0,new Particle.DustOptions(Color.fromRGB(85,194,93),1.0f)); playEnchantSound(p,key,l); }
+            case "dragonbreath" -> { w.spawnParticle(Particle.DRAGON_BREATH,l,34,.4,.5,.4,.025); w.spawnParticle(Particle.FLAME,l,12,.3,.3,.3,.015); playEnchantSound(p,key,l); }
+            case "sniper","armorbreaker","execution" -> { w.spawnParticle(Particle.CRIT,l,24,.35,.5,.35,.08); w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.2,.25,.2,0); playEnchantSound(p,key,l); }
+            case "radar","owl","wisdom" -> { w.spawnParticle(Particle.END_ROD,l,14,.3,.55,.3,.015); w.spawnParticle(Particle.ENCHANT,l,18,.35,.5,.35,.25); playEnchantSound(p,key,l); }
+            case "softsteps","sneak" -> { w.spawnParticle(Particle.CLOUD,l,12,.25,.08,.25,.01); w.spawnParticle(Particle.DUST,l,8,.25,.1,.25,0,new Particle.DustOptions(Color.fromRGB(181,159,220),.8f)); playEnchantSound(p,key,l); }
+            case "haste","experience","autosmelt","veinminer","drill" -> { w.spawnParticle(Particle.BLOCK,l,22,.35,.45,.35,.1,Material.DEEPSLATE.createBlockData()); w.spawnParticle(Particle.CRIT,l,8,.2,.25,.2,.04); playEnchantSound(p,key,l); }
+            case "spear_dash","aerodynamics" -> { w.spawnParticle(Particle.CLOUD,l,24,.35,.25,.35,.045); w.spawnParticle(Particle.END_ROD,l,14,.3,.35,.3,.02); playEnchantSound(p,key,l); }
+            case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); playEnchantSound(p,key,l); }
+            default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); playEnchantSound(p,key,l); }
+        }
+        if(Set.of("vampirism","bloodsucker","frost","venom","execution","thunder","dragonbreath","berserk","godslayer","worldeater","blackhole","phantomblade","shadow","immortality","reflection","secondwind","unbreakable","lightaura","titanshield").contains(key)) animateCombatEffect(p,key,l);
+        if(Set.of("blackhole","frost","venom","vampirism","bloodsucker","thunder","execution","berserk","godslayer","worldeater","immortality","reflection","secondwind","unbreakable","lightaura","titanshield","phantomblade","shadow").contains(key)) spawnVoxelScene(key,l);
+        Color signature = switch(key) {
+            case "venom","immunity" -> Color.fromRGB(93,220,104);
+            case "execution" -> Color.fromRGB(255,126,48);
+            case "thunder","stun","experience" -> Color.fromRGB(255,226,92);
+            case "berserk","bloodsucker" -> Color.fromRGB(210,38,58);
+            case "spear_dash","aerodynamics" -> Color.fromRGB(111,220,255);
+            case "bounce","doublejump" -> Color.fromRGB(188,116,255);
+            case "hook","waterwalker","diver","fish" -> Color.fromRGB(85,184,255);
+            case "phantomblade","shadow" -> Color.fromRGB(143,105,205);
+            case "reflection","titanshield","unbreakable" -> Color.fromRGB(220,224,238);
+            case "secondwind","lightaura" -> Color.fromRGB(157,255,203);
+            case "softsteps","sneak" -> Color.fromRGB(196,169,235);
+            case "woodcutter" -> Color.fromRGB(160,112,72);
+            case "heaviness" -> Color.fromRGB(151,160,174);
+            case "wings","hover" -> Color.fromRGB(210,240,255);
+            case "chameleon" -> Color.fromRGB(175,110,255);
+            default -> null;
+        };
+        if(signature!=null) {
+            spawnVoidRing(l,.48,signature,20);
+            spawnVoidRing(l,.76,signature,28);
+            w.spawnParticle(Particle.DUST,l.clone().add(0,.72,0),18,.28,.48,.28,0,new Particle.DustOptions(signature,1.15f));
+        }
+    }
+    private void animateCombatEffect(Player source,String key,Location origin) {
+        World world=origin.getWorld(); if(world==null)return;
+        final Color tint=switch(key) {
+            case "vampirism","bloodsucker","berserk" -> Color.fromRGB(190,24,52);
+            case "frost" -> Color.fromRGB(120,210,255);
+            case "venom" -> Color.fromRGB(80,220,90);
+            case "thunder","godslayer","lightaura" -> Color.fromRGB(255,205,75);
+            case "execution","dragonbreath" -> Color.fromRGB(255,105,55);
+            case "reflection","titanshield","unbreakable" -> Color.fromRGB(205,225,255);
+            case "secondwind","immortality" -> Color.fromRGB(145,255,190);
+            case "worldeater","blackhole","phantomblade","shadow" -> Color.fromRGB(135,65,220);
+            default -> Color.fromRGB(190,150,255);
+        };
+        new BukkitRunnable() {
+            int tick=0;
+            @Override public void run() {
+                if(tick>=9 || !origin.isWorldLoaded()) { cancel(); return; }
+                Location c=origin.clone().add(0,0.85,0);
+                double radius=0.28+tick*0.105;
+                switch(key) {
+                    case "vampirism","bloodsucker" -> {
+                        for(int n=0;n<5;n++){double a=(tick*0.62)+(Math.PI*2*n/5);world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*radius,Math.sin(a*1.7)*.24,Math.sin(a)*radius),1,0,0,0,0,new Particle.DustOptions(tint,1.35f));}
+                        world.spawnParticle(Particle.HEART,c,1,.12,.18,.12,0);
+                    }
+                    case "frost" -> {
+                        for(int n=0;n<8;n++){double a=Math.PI*2*n/8+tick*.18;world.spawnParticle(Particle.SNOWFLAKE,c.clone().add(Math.cos(a)*radius,0,Math.sin(a)*radius),1,0,0,0,0);}
+                        if(tick==5)world.spawnParticle(Particle.BLOCK,c,18,.35,.35,.35,.08,Material.ICE.createBlockData());
+                    }
+                    case "venom" -> {
+                        world.spawnParticle(Particle.SPORE_BLOSSOM_AIR,c,5,.24,.18,.24,.005);
+                        world.spawnParticle(Particle.DUST,c,7,.28,.24,.28,0,new Particle.DustOptions(tint,1.15f));
+                    }
+                    case "thunder","godslayer","execution" -> {
+                        for(int n=0;n<3;n++){double a=tick*.45+n*Math.PI*2/3;world.spawnParticle(Particle.ELECTRIC_SPARK,c.clone().add(Math.cos(a)*radius,Math.sin(tick*.35)*.25,Math.sin(a)*radius),2,.02,.08,.02,.02);}
+                        if(tick==2||tick==6)world.spawnParticle(Particle.FLASH,c,1,0,0,0,0);
+                    }
+                    case "reflection","titanshield","unbreakable","lightaura" -> {
+                        double r=0.55+tick*.08;
+                        for(int n=0;n<18;n++){double a=Math.PI*2*n/18;world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*r,Math.sin(a)*r,0),1,0,0,0,0,new Particle.DustOptions(tint,1.2f));}
+                        world.spawnParticle(Particle.ENCHANT,c,8,.42,.45,.42,.25);
+                    }
+                    case "secondwind","immortality" -> {
+                        double a=tick*.7;world.spawnParticle(Particle.HEART,c.clone().add(Math.cos(a)*radius,.15+tick*.035,Math.sin(a)*radius),1,0,0,0,0);
+                        world.spawnParticle(Particle.TOTEM_OF_UNDYING,c,3,.22,.28,.22,.04);
+                    }
+                    case "berserk" -> {
+                        double r=.35+tick*.09;for(int n=0;n<12;n++){double a=Math.PI*2*n/12;world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*r,0,Math.sin(a)*r),1,0,0,0,0,new Particle.DustOptions(tint,1.25f));}
+                        world.spawnParticle(Particle.FLAME,c,2,.28,.28,.28,.01);
+                    }
+                    case "worldeater","blackhole" -> {
+                        for(int n=0;n<12;n++){double a=tick*.55+n*Math.PI*2/12;world.spawnParticle(Particle.REVERSE_PORTAL,c.clone().add(Math.cos(a)*radius,.04*tick,Math.sin(a)*radius),1,0,0,0,.015);}
+                        if(tick==4)spawnBlackHoleCube(c);
+                    }
+                    case "dragonbreath" -> world.spawnParticle(Particle.DRAGON_BREATH,c,12,.38,.28,.38,.015);
+                    case "phantomblade","shadow" -> {
+                        world.spawnParticle(Particle.SMOKE,c,8,.24,.32,.24,.015);
+                        world.spawnParticle(Particle.REVERSE_PORTAL,c,5,.28,.35,.28,.02);
+                    }
+                    default -> {
+                        for(int n=0;n<10;n++){double a=Math.PI*2*n/10+tick*.22;world.spawnParticle(Particle.DUST,c.clone().add(Math.cos(a)*radius,0,Math.sin(a)*radius),1,0,0,0,0,new Particle.DustOptions(tint,1.0f));}
+                    }
+                }
+                tick++;
+            }
+        }.runTaskTimer(this,0L,1L);
+    }
+
     private void sendHelp(CommandSender sender, boolean admin) {
         sender.sendMessage("§5§lVoidEnchantments §8— §fкоманды");
         sender.sendMessage("§d/enchants §7— открыть каталог");
@@ -310,20 +516,22 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private int parseLevel(Spec s,String raw) {
         if(!s.leveled()) return 1;
-        try { return Math.max(1,Math.min(s.max(),Integer.parseInt(raw))); }
+        try { return Math.max(1,Math.min(maxLevel(s),Integer.parseInt(raw))); }
         catch(Exception ignored) { return 1; }
     }
     private void giveBook(Player p,Spec s,int lvl) {
         Map<Integer,ItemStack> rest=p.getInventory().addItem(book(s,lvl));
         rest.values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it));
+        p.playSound(p.getLocation(),"minecraft:ui.toast.challenge_complete",0.75f,1.15f);
+        p.playSound(p.getLocation(),"minecraft:entity.experience_orb.pickup",0.55f,1.2f);
     }
     private void sendSpecInfo(CommandSender sender,Spec s) {
         int tier=rarityTier(s);
-        sender.sendMessage("§5✦ §l"+s.name()+" §8("+s.key()+")");
-        sender.sendMessage("§7Описание: §f"+s.lore());
+        sender.sendMessage("§5✦ §l"+specName(s)+" §8("+s.key()+")");
+        sender.sendMessage("§7Описание: §f"+specDescription(s));
         sender.sendMessage("§7Предмет: §f"+appliesTo(s));
         sender.sendMessage("§7Редкость: "+rarityColor(tier)+rarityName(tier));
-        sender.sendMessage("§7Уровни: §f"+(s.leveled()?"I–"+roman(s.max()):"без уровней"));
+        sender.sendMessage("§7Уровни: §f"+(s.leveled()?"I–"+roman(maxLevel(s)):"без уровней"));
         sender.sendMessage("§7Статус: "+(isEnabled(s.key())?"§aвключено":"§cотключено"));
     }
     private boolean removeEnchant(Player p,Spec s) {
@@ -332,6 +540,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         for(ItemStack item:p.getInventory().getArmorContents()) changed|=removeEnchantFromItem(item,s);
         changed|=removeEnchantFromItem(p.getInventory().getItemInOffHand(),s);
         p.updateInventory();
+        if(changed) p.playSound(p.getLocation(),"minecraft:block.grindstone.use",0.85f,1.0f);
         return changed;
     }
     private boolean removeEnchantFromItem(ItemStack item,Spec s) {
@@ -343,7 +552,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             meta.getPersistentDataContainer().remove(levelKey);
         }
         List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
-        lore.removeIf(line->ChatColor.stripColor(line).startsWith(s.name()));
+        lore.removeIf(line->ChatColor.stripColor(line).startsWith(specName(s)));
         meta.setLore(lore.isEmpty()?null:lore);
         item.setItemMeta(meta);
         return true;
@@ -353,8 +562,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         for(int i=0;i<specs.size() && i<45;i++) {
             Spec s=specs.get(i); int tier=rarityTier(s);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            m.setDisplayName(gradient(s.name(),tier));
-            m.setLore(List.of("§7"+s.lore(),"§7Предмет: §f"+appliesTo(s),
+            m.setDisplayName(gradient(specName(s),tier));
+            m.setLore(List.of("§7"+specDescription(s),"§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Эффект: "+(isEnabled(s.key())?"§aВКЛЮЧЁН":"§cВЫКЛЮЧЕН"),
                 "§7Шанс выбора: §f"+chanceText(s),
@@ -375,19 +584,30 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         String sub=args.length==0?"":args[0].toLowerCase(Locale.ROOT);
         boolean admin=sender.hasPermission("voidenchants.admin");
         if(sub.isEmpty()) {
-            if(sender instanceof Player p) openCatalog(p,0); else sendHelp(sender,admin);
+            if(sender instanceof Player p) openCategories(p); else sendHelp(sender,admin);
             return true;
         }
         if(sub.equals("help")) { sendHelp(sender,admin); return true; }
         if(sub.equals("list")) {
             sender.sendMessage("§5§lVoidMain §8| §dКастомные зачарования:");
-            for(Spec s:specs) sender.sendMessage(rarityColor(rarityTier(s))+"• "+s.name()+" §8— §7"+s.key()+" §8| §f"+appliesTo(s));
+            for(Spec s:specs) sender.sendMessage(rarityColor(rarityTier(s))+"• "+specName(s)+" §8— §7"+s.key()+" §8| §f"+appliesTo(s));
             return true;
         }
         if(sub.equals("info") || sub.equals("инфо")) {
             if(args.length<2) { sender.sendMessage("§cИспользование: /enchants info <чар>"); return true; }
             Spec s=findSpec(args[1]); if(s==null) sender.sendMessage("§cТакое зачарование не найдено."); else sendSpecInfo(sender,s);
             return true;
+        }
+        if(sub.equals("effects")) {
+            if(!(sender instanceof Player p)) { sender.sendMessage("§cКоманда только для игрока."); return true; }
+            boolean enabled=!effectsEnabled.getOrDefault(p.getUniqueId(),true); effectsEnabled.put(p.getUniqueId(),enabled);
+            p.sendMessage(enabled?"§5✦ §dЭффекты зачарований включены.":"§8✦ §7Частицы и звуки зачарований отключены."); return true;
+        }
+        if(sub.equals("history")) {
+            if(!(sender instanceof Player p)) { sender.sendMessage("§cКоманда только для игрока."); return true; }
+            Deque<String> entries=activationHistory.getOrDefault(p.getUniqueId(),new ArrayDeque<>());
+            p.sendMessage("§5§lVoidMain §8| §dПоследние срабатывания");
+            if(entries.isEmpty()) p.sendMessage("§7Пока нет записей."); else entries.forEach(p::sendMessage); return true;
         }
         if(sub.equals("apply")) {
             sender.sendMessage("§d✦ §fКак применить кастомное зачарование:");
@@ -410,7 +630,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
                 if(target==null || s==null) { sender.sendMessage("§cИгрок или зачарование не найдено."); return true; }
                 int lvl=args.length>3?parseLevel(s,args[3]):1; giveBook(target,s,lvl);
-                sender.sendMessage(gradient("Выдано игроку "+target.getName()+": "+s.name()+" "+roman(lvl)));
+                sender.sendMessage(gradient("Выдано игроку "+target.getName()+": "+specName(s)+" "+roman(lvl)));
             }
             case "giveall" -> {
                 if(args.length<2) { sender.sendMessage("§c/ve giveall <чар> [уровень]"); return true; }
@@ -431,6 +651,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 Spec selected=findSpec(args[1]); ItemStack hand=p.getInventory().getItemInMainHand();
                 if(selected==null || hand.getType()==Material.AIR) { sender.sendMessage("§cУкажи зачарование и держи предмет в руке."); return true; }
                 boolean removed=removeEnchantFromItem(hand,selected); p.updateInventory();
+                if(removed) p.playSound(p.getLocation(),"voidmain:enchant_remove",0.8f,1.0f);
                 sender.sendMessage(removed?"§aЗачарование снято с предмета в руке.":"§eНа предмете нет этого зачарования.");
             }
             case "remove" -> {
@@ -454,7 +675,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 sender.sendMessage("§5§lVoidMain §8| §dВыпадение книг с жителей");
                 for(Spec s:specs) {
                     int count=getConfig().getInt("drop-count."+s.key(),0);
-                    sender.sendMessage(rarityColor(rarityTier(s))+s.name()+" §8— §f"+count+" §7шт. §8| §7шанс "+chanceText(s));
+                    sender.sendMessage(rarityColor(rarityTier(s))+specName(s)+" §8— §f"+count+" §7шт. §8| §7шанс "+chanceText(s));
                 }
             }
             case "admin" -> {
@@ -466,7 +687,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args) {
         boolean admin=sender.hasPermission("voidenchants.admin");
-        List<String> roots=new ArrayList<>(List.of("help","list","info","apply"));
+        List<String> roots=new ArrayList<>(List.of("help","list","info","apply","effects","history"));
         if(admin) roots.addAll(List.of("give","giveall","remove","strip","book","adminbook","reload","debug","drops","admin"));
         if(args.length==1) return roots.stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         String sub=args[0].toLowerCase(Locale.ROOT);
@@ -479,50 +700,128 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if((args.length==4 && sub.equals("give")) || (args.length==3 && List.of("giveall","book").contains(sub))) return List.of("1","2","3","4");
         return List.of();
     }
-    private void openCatalog(Player p,int page) {
-        int pageSize=45;
-        int maxPage=Math.max(0,(specs.size()-1)/pageSize);
+    private String categoryName(String key) {
+        return categories.stream().filter(c->c.key().equals(key)).map(Category::title).findFirst().orElse("Зачарования");
+    }
+    private boolean belongsToCategory(Spec s,String category) {
+        return switch(category) {
+            case "swords" -> Set.of("moon","godslayer","vampirism","frost","venom","execution","phantomblade").contains(s.key());
+            case "axes" -> Set.of("woodcutter","cleave","stun","heaviness","axemaster","berserk").contains(s.key());
+            case "mace" -> Set.of("thunder","blackhole","bounce","worldeater").contains(s.key());
+            case "pickaxes" -> Set.of("magnet","drill","autosmelt","veinminer","haste","experience").contains(s.key());
+            case "armor" -> Set.of("fish","dragonbreath","sneak","diver","immunity","softsteps","lavawalker","owl","wisdom","radar","chameleon","immortality","shadow","doublejump","waterwalker").contains(s.key());
+            case "shields" -> Set.of("reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield").contains(s.key());
+            case "bows" -> Set.of("sniper").contains(s.key());
+            case "spears" -> Set.of("spear_dash","hook","armorbreaker").contains(s.key());
+            case "elytra" -> Set.of("wings","hover","aerodynamics").contains(s.key());
+            default -> false;
+        };
+    }
+    private String currentCatalogCategory(Inventory inv) {
+        ItemStack tab=inv.getItem(0);
+        if(tab==null || !tab.hasItemMeta()) return "swords";
+        String value=tab.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+        return value==null?"swords":value;
+    }
+    private int currentCatalogPage(Inventory inv) {
+        ItemStack marker=inv.getItem(49);
+        if(marker==null || !marker.hasItemMeta()) return 0;
+        Integer value=marker.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+        return value==null?0:value;
+    }
+    private void fillMenuFrame(Inventory inv) {
+        for(int slot=0;slot<inv.getSize();slot++) {
+            ItemStack tile=new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+            ItemMeta meta=tile.getItemMeta();
+            meta.setDisplayName("§0 ");
+            tile.setItemMeta(meta);
+            inv.setItem(slot,tile);
+        }
+    }
+    private void openCategories(Player p) {
+        Inventory inv=Bukkit.createInventory(null,54,CATEGORY_TITLE);
+        fillMenuFrame(inv);
+        int[] slots={10,12,14,19,21,23,28,30,32};
+        for(int i=0;i<categories.size();i++) {
+            Category category=categories.get(i);
+            ItemStack icon=new ItemStack(category.icon());
+            ItemMeta meta=icon.getItemMeta();
+            meta.setDisplayName("§d§l"+category.title());
+            meta.setLore(List.of("§7Посмотреть чары для предмета","", "§eНажми, чтобы открыть"));
+            meta.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category.key());
+            icon.setItemMeta(meta);
+            inv.setItem(slots[i],icon);
+        }
+        ItemStack close=new ItemStack(Material.BARRIER);
+        ItemMeta cm=close.getItemMeta(); cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm);
+        inv.setItem(49,close);
+        p.openInventory(inv);
+    }
+    private boolean belongsTo(Spec spec,String category) {
+        String target=appliesTo(spec);
+        return switch(category) {
+            case "swords" -> target.contains("Меч");
+            case "axes" -> target.contains("топор") || target.contains("Топор");
+            case "mace" -> target.contains("Булава");
+            case "pickaxes" -> target.contains("Кирка") || target.contains("лопата");
+            case "armor" -> target.contains("Шлем") || target.contains("Нагрудник") || target.contains("Поножи")
+                    || target.contains("Ботинки") || target.contains("броня");
+            case "shields" -> target.contains("Щит");
+            case "bows" -> target.contains("Лук");
+            case "spears" -> target.contains("Копьё");
+            case "elytra" -> target.contains("Элитры");
+            default -> false;
+        };
+    }
+    private void openCatalog(Player p,String category,int page) {
+        Category selectedCategory=categories.stream().filter(c->c.key().equals(category)).findFirst().orElse(null);
+        if(selectedCategory==null) { openCategories(p); return; }
+        List<Spec> visible=specs.stream().filter(x->belongsTo(x,category)).toList();
+        int pageSize=36;
+        int maxPage=Math.max(0,(visible.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
         Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
+        fillMenuFrame(inv);
         int start=page*pageSize;
-        for(int i=0;i<pageSize && start+i<specs.size();i++) {
-            Spec s=specs.get(start+i);
-            ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            int tier=rarityTier(s);
-            m.setDisplayName(gradient(s.name(),tier));
-            m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+        for(int i=0;i<pageSize && start+i<visible.size();i++) {
+            Spec spec=visible.get(start+i);
+            ItemStack icon=new ItemStack(spec.icon()); ItemMeta meta=icon.getItemMeta();
+            int tier=rarityTier(spec);
+            meta.setDisplayName(gradient(specName(spec),tier));
+            meta.setLore(List.of("§7"+specDescription(spec),"","§7Предмет: §f"+appliesTo(spec),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
-                "§7Уровни: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),
-                "",s.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
-            m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
-            icon.setItemMeta(m); inv.setItem(i,icon);
+                "§7Уровни: §f"+(spec.leveled()?"I–"+roman(maxLevel(spec)):"Без уровней"),
+                "",spec.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
+            meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,spec.key());
+            icon.setItemMeta(meta); inv.setItem(i,icon);
         }
-
+        ItemStack back=new ItemStack(Material.ARROW); ItemMeta bm=back.getItemMeta();
+        bm.setDisplayName("§d← Выбор предмета"); bm.setLore(List.of("§7Вернуться к категориям"));
+        back.setItemMeta(bm); inv.setItem(45,back);
         ItemStack previous=new ItemStack(page>0?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta pm=previous.getItemMeta();
-        pm.setDisplayName(page>0?"§d← Предыдущая страница":"§8Первая страница");
-        pm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        pm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.max(0,page-1));
-        previous.setItemMeta(pm); inv.setItem(45,previous);
-
-        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
-        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
-
+        ItemMeta pm=previous.getItemMeta(); pm.setDisplayName(page>0?"§d← Назад":"§8Первая страница");
+        pm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.max(0,page-1));
+        pm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category);
+        previous.setItemMeta(pm); inv.setItem(47,previous);
+        ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta(); cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
         ItemStack next=new ItemStack(page<maxPage?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta nm=next.getItemMeta();
-        nm.setDisplayName(page<maxPage?"§dСледующая страница →":"§8Последняя страница");
-        nm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        nm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
-        next.setItemMeta(nm); inv.setItem(53,next);
+        ItemMeta nm=next.getItemMeta(); nm.setDisplayName(page<maxPage?"§dДалее →":"§8Последняя страница");
+        nm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
+        nm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category);
+        next.setItemMeta(nm); inv.setItem(51,next);
+        ItemStack heading=new ItemStack(selectedCategory.icon()); ItemMeta hm=heading.getItemMeta();
+        hm.setDisplayName("§d§l"+selectedCategory.title());
+        hm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
+        heading.setItemMeta(hm); inv.setItem(53,heading);
         p.openInventory(inv);
     }
     private void openLevelMenu(Player p,Spec s) {
         Inventory inv=Bukkit.createInventory(null,27,LEVEL_TITLE);
         int tier=rarityTier(s);
-        for(int lvl=1;lvl<=s.max();lvl++) {
+        for(int lvl=1;lvl<=maxLevel(s);lvl++) {
             ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
-            meta.setDisplayName(gradient(s.name(),tier)+" §7"+roman(lvl));
-            meta.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+            meta.setDisplayName(gradient(specName(s),tier)+" §7"+roman(lvl));
+            meta.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
             meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
@@ -537,7 +836,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     @EventHandler public void onCatalogDrag(InventoryDragEvent e) {
         String title = e.getView().getTitle();
-        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
+        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE) || title.equals(CATEGORY_TITLE)) e.setCancelled(true);
     }
 
     @EventHandler public void onCatalog(InventoryClickEvent e) {
@@ -555,14 +854,23 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 double delta=e.getClick()==ClickType.SHIFT_LEFT?0.05:-0.05;
                 double next=Math.max(0,Math.min(100,dropChance(selected)+delta));
                 getConfig().set("drop-chance."+selected.key(),next); saveConfig();
-                p.sendMessage("§dШанс "+selected.name()+": §f"+String.format(Locale.US,"%.3f",next)+"%");
+                p.sendMessage("§dШанс "+specName(selected)+": §f"+String.format(Locale.US,"%.3f",next)+"%");
             } else {
                 List<String> disabled=new ArrayList<>(getConfig().getStringList("disabled-enchants"));
                 if(disabled.contains(selected.key())) disabled.remove(selected.key()); else disabled.add(selected.key());
                 getConfig().set("disabled-enchants",disabled); saveConfig();
-                p.sendMessage("§d"+selected.name()+": "+(isEnabled(selected.key())?"§aвключено":"§cотключено"));
+                p.sendMessage("§d"+specName(selected)+": "+(isEnabled(selected.key())?"§aвключено":"§cотключено"));
             }
             openAdmin(p); return;
+        }
+        if(title.equals(CATEGORY_TITLE)) {
+            e.setCancelled(true);
+            if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
+            ItemStack clicked=e.getCurrentItem(); if(clicked==null || clicked.getType()==Material.AIR) return;
+            if(e.getRawSlot()==49) { p.closeInventory(); return; }
+            String category=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+            if(category!=null) { p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f); openCatalog(p,category,0); }
+            return;
         }
         if(title.equals(LEVEL_TITLE)) {
             e.setCancelled(true);
@@ -575,14 +883,14 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             ItemStack clicked=e.getCurrentItem();
             if(clicked==null || clicked.getType()==Material.AIR) return;
             if(e.getRawSlot()==26) { p.closeInventory(); return; }
-            if(e.getRawSlot()==18) { openCatalog(p,0); return; }
+            if(e.getRawSlot()==18) { openCategories(p); return; }
             Spec selected=findSpec(id(clicked));
             if(selected==null || !selected.leveled()) return;
             int lvl=level(clicked);
-            if(lvl<1 || lvl>selected.max()) return;
+            if(lvl<1 || lvl>maxLevel(selected)) return;
             giveBook(p,selected,lvl);
             p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.4f);
-            p.sendMessage(gradient("✦ Получена книга: "+selected.name()+" "+roman(lvl)));
+            p.sendMessage(gradient("✦ Получена книга: "+specName(selected)+" "+roman(lvl)));
             p.closeInventory(); return;
         }
         if(!title.equals(CATALOG_TITLE)) return;
@@ -601,11 +909,13 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack clicked=e.getCurrentItem();
         if(clicked==null || clicked.getType()==Material.AIR) return;
         if(e.getRawSlot()==49 && clicked.getType()==Material.BARRIER) { p.closeInventory(); return; }
-        if(e.getRawSlot()==45 || e.getRawSlot()==53) {
-            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
-            if(targetPage!=null) {
+        if(e.getRawSlot()==45) { openCategories(p); return; }
+        if(e.getRawSlot()==47 || e.getRawSlot()==51) {
+            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+            String category=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+            if(targetPage!=null && category!=null) {
                 p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f);
-                openCatalog(p,targetPage);
+                openCatalog(p,category,targetPage);
             }
             return;
         }
@@ -614,17 +924,171 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(selected.leveled()) { openLevelMenu(p,selected); return; }
         giveBook(p,selected,1);
         p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.5f);
-        p.sendMessage(gradient("✦ Получена книга: "+selected.name()));
+        p.sendMessage(gradient("✦ Получена книга: "+specName(selected)));
         p.closeInventory();
     }
 
+    @EventHandler public void onCustomEnchantApply(InventoryClickEvent e) {
+        if(e.getRawSlot()!=2 || e.getView().getTopInventory().getType()!=InventoryType.ANVIL) return;
+        if(!(e.getWhoClicked() instanceof Player p)) return;
+        ItemStack left=e.getView().getTopInventory().getItem(0);
+        ItemStack right=e.getView().getTopInventory().getItem(1);
+        if(id(left)==null && id(right)==null) return;
+        ItemStack result=e.getView().getTopInventory().getItem(2);
+        if(result!=null && result.getType()!=Material.AIR && id(result)!=null) {
+            p.playSound(p.getLocation(),"minecraft:block.enchantment_table.use",0.9f,1.08f);
+            p.playSound(p.getLocation(),"minecraft:block.amethyst_block.chime",0.5f,1.3f);
+        } else {
+            p.playSound(p.getLocation(),"minecraft:entity.villager.no",0.9f,0.82f);
+            p.playSound(p.getLocation(),"minecraft:entity.villager.no",0.55f,0.85f);
+        }
+    }
+
+    private final Map<UUID,Float> frozenWalkSpeeds=new HashMap<>();
+    private final Map<UUID,Integer> frozenPlayerTasks=new HashMap<>();
     private void immobilize(LivingEntity target) { immobilize(target,40L); }
     private void immobilize(LivingEntity target,long ticks) {
-        if(target instanceof Player victim) { float old=victim.getWalkSpeed(); victim.setWalkSpeed(0f); victim.setVelocity(new Vector(0,0,0)); Bukkit.getScheduler().runTaskLater(this,()->{if(victim.isOnline())victim.setWalkSpeed(old);},ticks); }
-        else if(target instanceof Mob mob) { boolean old=mob.hasAI(); mob.setAI(false); Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},ticks); }
-        else { target.setVelocity(new Vector(0,0,0)); target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false)); }
-        target.getWorld().spawnParticle(Particle.PORTAL,target.getLocation().add(0,1,0),35,0.5,0.7,0.5,0.15);
+        Location center=target.getLocation().add(0,0.9,0);
+        if(target instanceof Player victim) {
+            UUID id=victim.getUniqueId();
+            Integer previous=frozenPlayerTasks.remove(id);
+            if(previous!=null) Bukkit.getScheduler().cancelTask(previous);
+            frozenWalkSpeeds.putIfAbsent(id,victim.getWalkSpeed());
+            victim.setWalkSpeed(0f);
+            victim.setVelocity(new Vector(0,0,0));
+            victim.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false),true);
+            victim.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST,(int)ticks,128,true,false),true);
+            int task=Bukkit.getScheduler().scheduleSyncDelayedTask(this,()->{
+                if(victim.isOnline()) {
+                    victim.setWalkSpeed(frozenWalkSpeeds.getOrDefault(id,0.2f));
+                    victim.removePotionEffect(PotionEffectType.SLOWNESS);
+                    victim.removePotionEffect(PotionEffectType.JUMP_BOOST);
+                    victim.setVelocity(new Vector(0,0,0));
+                }
+                frozenWalkSpeeds.remove(id);
+                frozenPlayerTasks.remove(id);
+            },ticks);
+            frozenPlayerTasks.put(id,task);
+        } else if(target instanceof Mob mob) {
+            boolean old=mob.hasAI(); mob.setAI(false); mob.setVelocity(new Vector(0,0,0));
+            Bukkit.getScheduler().runTaskLater(this,()->{if(mob.isValid())mob.setAI(old);},ticks);
+        } else {
+            target.setVelocity(new Vector(0,0,0));
+            target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,(int)ticks,10,true,false),true);
+        }
+        target.getWorld().spawnParticle(Particle.PORTAL,center,42,0.45,0.55,0.45,0.12);
+        target.getWorld().spawnParticle(Particle.DUST,center,18,0.35,0.45,0.35,0,new Particle.DustOptions(Color.fromRGB(86,24,145),1.25f));
+        spawnBlackHoleCube(center);
     }
+    private void spawnBlackHoleCube(Location center) {
+        World world=center.getWorld(); if(world==null)return;
+        Color edge=Color.fromRGB(104,42,174);
+        double half=0.92;
+        for(int step=0;step<=8;step++) {
+            double t=-half+(2*half*step/8.0);
+            for(int a=-1;a<=1;a+=2) for(int b=-1;b<=1;b+=2) {
+                world.spawnParticle(Particle.DUST,center.clone().add(t,a*half,b*half),1,0,0,0,0,new Particle.DustOptions(edge,1.35f));
+                world.spawnParticle(Particle.DUST,center.clone().add(a*half,t,b*half),1,0,0,0,0,new Particle.DustOptions(edge,1.35f));
+                world.spawnParticle(Particle.DUST,center.clone().add(a*half,b*half,t),1,0,0,0,0,new Particle.DustOptions(edge,1.35f));
+            }
+        }
+        world.spawnParticle(Particle.REVERSE_PORTAL,center,22,0.42,0.42,0.42,0.08);
+    }
+
+    // Короткие 3D-сценки из настоящих BlockDisplay: это объекты мира, а не плоские частицы.
+    private void spawnVoxelScene(String key, Location origin) {
+        World world=origin.getWorld(); if(world==null || !world.isChunkLoaded(origin.getBlockX()>>4,origin.getBlockZ()>>4)) return;
+        Material[] palette=switch(key) {
+            case "blackhole" -> new Material[]{Material.CRYING_OBSIDIAN,Material.PURPLE_STAINED_GLASS,Material.AMETHYST_BLOCK,Material.OBSIDIAN};
+            case "frost" -> new Material[]{Material.PACKED_ICE,Material.BLUE_ICE,Material.ICE,Material.LIGHT_BLUE_STAINED_GLASS};
+            case "godslayer" -> new Material[]{Material.GOLD_BLOCK,Material.GILDED_BLACKSTONE,Material.QUARTZ_BLOCK,Material.YELLOW_STAINED_GLASS};
+            case "worldeater" -> new Material[]{Material.OBSIDIAN,Material.CRYING_OBSIDIAN,Material.PURPLE_STAINED_GLASS,Material.AMETHYST_BLOCK};
+            case "venom" -> new Material[]{Material.EMERALD_BLOCK,Material.SLIME_BLOCK,Material.LIME_STAINED_GLASS,Material.MOSS_BLOCK};
+            case "vampirism","bloodsucker" -> new Material[]{Material.REDSTONE_BLOCK,Material.REDSTONE_LAMP,Material.RED_STAINED_GLASS,Material.NETHER_WART_BLOCK};
+            case "thunder" -> new Material[]{Material.LIGHTNING_ROD,Material.COPPER_BLOCK,Material.GOLD_BLOCK,Material.YELLOW_STAINED_GLASS};
+            case "execution","berserk" -> new Material[]{Material.RED_NETHER_BRICKS,Material.REDSTONE_BLOCK,Material.NETHERITE_BLOCK,Material.RED_STAINED_GLASS};
+            case "reflection","titanshield","unbreakable" -> new Material[]{Material.IRON_BLOCK,Material.CYAN_STAINED_GLASS,Material.PRISMARINE_BRICKS,Material.DIAMOND_BLOCK};
+            case "secondwind" -> new Material[]{Material.SEA_LANTERN,Material.EMERALD_BLOCK,Material.LIGHT_BLUE_STAINED_GLASS,Material.GLOWSTONE};
+            case "immortality","lightaura" -> new Material[]{Material.GOLD_BLOCK,Material.SEA_LANTERN,Material.QUARTZ_BLOCK,Material.YELLOW_STAINED_GLASS};
+            case "phantomblade","shadow" -> new Material[]{Material.CRYING_OBSIDIAN,Material.BLACKSTONE,Material.PURPLE_STAINED_GLASS,Material.OBSIDIAN};
+            default -> new Material[]{Material.AMETHYST_BLOCK,Material.PURPLE_STAINED_GLASS,Material.QUARTZ_BLOCK,Material.CRYING_OBSIDIAN};
+        };
+        final List<BlockDisplay> parts=new ArrayList<>();
+        final Location base=origin.clone().add(0,0.15,0);
+        final int count=key.equals("blackhole")||key.equals("worldeater")?9:7;
+        for(int i=0;i<count;i++) {
+            final int index=i;
+            Location at=base.clone().add(0,0.8,0);
+            BlockDisplay display=world.spawn(at,BlockDisplay.class,entity->{
+                entity.setBlock(palette[iSafe(index,palette.length)].createBlockData());
+                entity.setPersistent(false);
+                entity.setInvulnerable(true);
+                entity.setGravity(false);
+                entity.setShadowRadius(0.0f);
+                entity.setViewRange(0.8f);
+                float size=(index==0?0.58f:0.27f);
+                entity.setTransformation(new org.bukkit.util.Transformation(
+                    new org.joml.Vector3f(-size/2f,-size/2f,-size/2f),
+                    new org.joml.AxisAngle4f(0,0,1,0),
+                    new org.joml.Vector3f(size,size,size),
+                    new org.joml.AxisAngle4f(0,0,1,0)));
+            });
+            parts.add(display);
+        }
+        new BukkitRunnable() {
+            int tick=0;
+            @Override public void run() {
+                if(tick>=18 || !origin.isWorldLoaded()) { parts.forEach(Entity::remove); cancel(); return; }
+                double progress=tick/17.0;
+                double spin=tick*0.22;
+                for(int i=0;i<parts.size();i++) {
+                    BlockDisplay d=parts.get(i);
+                    if(!d.isValid()) continue;
+                    Location pos=base.clone();
+                    double scale;
+                    if(i==0) {
+                        pos.add(0,0.85+Math.sin(tick*0.34)*0.08,0);
+                        scale=(float)(0.72*(1.0-progress*0.42));
+                    } else if(key.equals("blackhole")||key.equals("worldeater")) {
+                        // Восемь кубов образуют вращающуюся объёмную рамку.
+                        int corner=i-1;
+                        double x=(corner&1)==0?-1:1, y=(corner&2)==0?-1:1, z=(corner&4)==0?-1:1;
+                        double a=spin*(key.equals("blackhole")?1.0:0.72);
+                        double rx=x*Math.cos(a)-z*Math.sin(a), rz=x*Math.sin(a)+z*Math.cos(a);
+                        double radius=0.82*(1.0-progress*0.30);
+                        pos.add(rx*radius,y*radius+0.85,rz*radius);
+                        scale=(float)(0.34*(1.0-progress*0.35));
+                    } else {
+                        double a=spin+i*Math.PI*2.0/(parts.size()-1);
+                        double radius=0.62*(1.0-progress*0.25);
+                        pos.add(Math.cos(a)*radius,0.82+Math.sin(tick*0.28+i)*0.13,Math.sin(a)*radius);
+                        scale=(float)(0.34*(1.0-progress*0.30));
+                    }
+                    d.teleport(pos);
+                    d.setTransformation(new org.bukkit.util.Transformation(
+                        new org.joml.Vector3f((float)(-scale/2f),(float)(-scale/2f),(float)(-scale/2f)),
+                        new org.joml.AxisAngle4f((float)(spin+i*0.4),0.35f,1.0f,0.2f),
+                        new org.joml.Vector3f((float)scale,(float)scale,(float)scale),
+                        new org.joml.AxisAngle4f(0,0,1,0)));
+                }
+                if(tick%3==0) {
+                    Color tint=switch(key) {
+                        case "frost" -> Color.fromRGB(125,215,255);
+                        case "venom" -> Color.fromRGB(80,225,95);
+                        case "vampirism","bloodsucker","berserk","execution" -> Color.fromRGB(215,35,55);
+                        case "godslayer","immortality","lightaura" -> Color.fromRGB(255,205,75);
+                        case "reflection","titanshield","unbreakable" -> Color.fromRGB(115,225,235);
+                        case "secondwind" -> Color.fromRGB(110,255,190);
+                        default -> Color.fromRGB(150,70,235);
+                    };
+                    world.spawnParticle(Particle.DUST,base.clone().add(0,0.9,0),5,0.34,0.38,0.34,0,new Particle.DustOptions(tint,1.15f));
+                }
+                tick++;
+            }
+        }.runTaskTimer(this,0L,1L);
+    }
+    private int iSafe(int index,int length) { return Math.floorMod(index,length); }
+
     private byte entityFlags(Entity entity, boolean glowing) {
         int flags=0;
         if(entity instanceof LivingEntity burning && burning.getFireTicks()>0)flags|=0x01;
@@ -688,6 +1152,16 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case 4 -> new int[][]{{35,170,255},{125,210,255},{195,235,255},{255,255,255}};
             default -> new int[][]{{45,205,105},{125,235,160},{195,250,215},{255,255,255}};
         };
+        List<String> configured=getConfig().getStringList("style.gradients."+tier);
+        if(configured.size()>=2) {
+            List<int[]> parsed=new ArrayList<>();
+            for(String raw:configured) {
+                String hex=raw.startsWith("#")?raw.substring(1):raw;
+                if(!hex.matches("(?i)[0-9a-f]{6}")) continue;
+                parsed.add(new int[]{Integer.parseInt(hex.substring(0,2),16),Integer.parseInt(hex.substring(2,4),16),Integer.parseInt(hex.substring(4,6),16)});
+            }
+            if(parsed.size()>=2) colors=parsed.toArray(new int[0][]);
+        }
         StringBuilder out = new StringBuilder();
         int visible = Math.max(1, input.length()-1);
         for (int i=0;i<input.length();i++) {
@@ -714,7 +1188,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "chameleon","immortality" -> type.name().endsWith("_CHESTPLATE");
             case "berserk" -> type.name().endsWith("_AXE");
             case "worldeater" -> type==Material.MACE;
-            case "creatorhand" -> type.name().endsWith("_PICKAXE");
             case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> type==Material.SHIELD;
             case "drill","autosmelt","veinminer","haste","experience" -> type.name().endsWith("_PICKAXE");
             case "vampirism","frost","venom","execution","phantomblade" -> type.name().endsWith("_SWORD");
@@ -737,7 +1210,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         meta.getPersistentDataContainer().set(itemEnchantKey(enchant.key()),PersistentDataType.INTEGER,lvl);
         List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
         int tier=rarityTier(enchant);
-        lore.add(gradient(enchant.name(),tier)+" §7"+(enchant.leveled()?roman(lvl):"I"));
+        lore.add(gradient(specName(enchant),tier)+" §7"+(enchant.leveled()?roman(lvl):"I"));
         meta.setLore(lore);
         target.setItemMeta(meta);
     }
@@ -752,7 +1225,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(leftBook && rightBook) {
             Spec a=spec(leftKey), b=spec(rightKey);
             if(a==null || b==null || !leftKey.equals(rightKey) || !a.leveled() ||
-               level(left)!=level(right) || level(left)>=a.max()) { e.setResult(null); return; }
+               level(left)!=level(right) || level(left)>=maxLevel(a)) { e.setResult(null); return; }
             e.setResult(book(a,level(left)+1));
             inv.setRepairCost(4+level(left));
             return;
@@ -782,9 +1255,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         return pool.get(pool.size()-1);
     }
     private int tradeLevel(Spec chosen) {
-        if(!chosen.leveled() || chosen.max()<=1) return 1;
+        if(!chosen.leveled() || maxLevel(chosen)<=1) return 1;
         if(Math.random()<0.55) return 1;
-        return 2+new Random().nextInt(chosen.max()-1);
+        return 2+new Random().nextInt(maxLevel(chosen)-1);
     }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
         if(!getConfig().getBoolean("drops.villager-trade.enabled",true)) return;
@@ -803,12 +1276,12 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Spec chosen=weightedSpec(false);
         if(chosen==null) return;
         // Guaranteed: every villager death gives exactly one custom book.
-        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        int lvl=chosen.leveled()?1+new Random().nextInt(maxLevel(chosen)):1;
         ItemStack reward=book(chosen,lvl);
         e.getDrops().add(reward);
         if(rarityTier(chosen)==1 && getConfig().getBoolean("messages.divine-broadcast.enabled",true)) {
             String message=getConfig().getString("messages.divine-broadcast.format","§d✦ §f{player} нашёл §c[{enchant}]§f!")
-                .replace("{player}",e.getEntity().getName()).replace("{enchant}",chosen.name());
+                .replace("{player}",e.getEntity().getName()).replace("{enchant}",specName(chosen));
             for(Player online:Bukkit.getOnlinePlayers()) online.sendMessage(message);
         }
         getConfig().set("drop-count."+chosen.key(),getConfig().getInt("drop-count."+chosen.key(),0)+1);
@@ -826,7 +1299,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(Math.random()*100.0>=chance) return;
         Spec chosen=weightedSpec(false);
         if(chosen==null) return;
-        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        int lvl=chosen.leveled()?1+new Random().nextInt(maxLevel(chosen)):1;
         e.getLoot().add(book(chosen,lvl));
     }
 
@@ -923,8 +1396,15 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         }
         if(keys.contains("execution") && e.getEntity() instanceof LivingEntity le && le.getHealth()<=le.getMaxHealth()*0.30 && ready(p,"execution",5000)) { e.setDamage(e.getDamage()*2); visual(p,"execution",le.getLocation()); }
         int hit=hitCounters.merge(uid,1,Integer::sum);
-        if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));visual(p,"vampirism",p.getLocation());}
+        if(keys.contains("vampirism")&&hit%5==0&&ready(p,"vampirism",5000)){p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+enchantLevel(weapon,"vampirism")));if(e.getEntity() instanceof LivingEntity bloodTarget) { spawnBloodDrips(bloodTarget); visual(p,"vampirism",bloodTarget.getLocation()); } else visual(p,"vampirism",p.getLocation());}
         if(e.getEntity() instanceof LivingEntity target) {
+            if(keys.contains("vampirism") && keys.contains("venom") && hit%5==0 && ready(p,"synergy_blood_poison",15000L)) {
+                target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,60,1,true,true));
+                p.setHealth(Math.min(p.getMaxHealth(),p.getHealth()+1.0));
+                spawnBloodDrips(target);
+                visual(p,"vampirism",target.getLocation());
+                p.sendActionBar(LegacyComponentSerializer.legacySection().deserialize("§5✦ §dСинергия: §cКровавый яд §8• §fВампиризм + Веном"));
+            }
             if(keys.contains("frost")&&hit%3==0&&ready(p,"frost",4000)){target.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS,40,0));visual(p,"frost",target.getLocation());}
             if(keys.contains("venom")&&hit%3==0&&ready(p,"venom",5000)){target.addPotionEffect(new PotionEffect(PotionEffectType.POISON,100,0));visual(p,"venom",target.getLocation());}
             if(keys.contains("thunder") && Math.random()<0.20 && ready(p,"thunder",7000)) {
@@ -974,25 +1454,11 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @EventHandler public void attackerNausea(EntityDamageByEntityEvent e) {
         if(e.getEntity() instanceof Player victim && e.getDamager() instanceof LivingEntity attacker && has(victim,"dragonbreath") && Math.random()<0.10 && ready(victim,"dragonbreath",8000)) { attacker.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA,100,0)); visual(victim,"dragonbreath",attacker.getLocation()); }
     }
-    private void loadCreatorBlocks() {
-        for(String raw:getConfig().getStringList("admin-enchants.creator-blocks")) {
-            String[] part=raw.split(";");
-            if(part.length!=4) continue;
-            World world=Bukkit.getWorld(part[0]); if(world==null) continue;
-            try { creatorBlocks.add(new Location(world,Integer.parseInt(part[1]),Integer.parseInt(part[2]),Integer.parseInt(part[3]))); }
-            catch(NumberFormatException ignored) {}
-        }
-    }
-    private void saveCreatorBlocks() {
-        List<String> data=new ArrayList<>();
-        for(Location loc:creatorBlocks) if(loc.getWorld()!=null)
-            data.add(loc.getWorld().getName()+";"+loc.getBlockX()+";"+loc.getBlockY()+";"+loc.getBlockZ());
-        getConfig().set("admin-enchants.creator-blocks",data); saveConfig();
-    }
     private void refreshDiver(Player p) {
         if (!has(p,"diver") || !inWater(p)) return;
         int level = Math.max(1, Math.min(3, equippedLevel(p,"diver")));
-        int amplifier = level - 1;
+        // Ослабление примерно в 1.6 раза: ступени усиления сжаты, максимум — эффект II.
+        int amplifier = Math.min(1, (int)Math.floor((level - 1) / 1.6));
         PotionEffect current = p.getPotionEffect(PotionEffectType.DOLPHINS_GRACE);
         // Reapply periodically so the bonus remains active even when the player is swimming without triggering move events.
         if (current == null || current.getAmplifier() < amplifier || current.getDuration() < 25) {
@@ -1096,12 +1562,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(!has(p,"doublejump") || p.getGameMode()==GameMode.CREATIVE || p.getGameMode()==GameMode.SPECTATOR) return;
         e.setCancelled(true);
         if(System.currentTimeMillis()<doubleJumpCooldown.getOrDefault(p.getUniqueId(),0L)) return;
+        if(!ready(p,"doublejump",40000L)) return;
         doubleJumpCooldown.put(p.getUniqueId(),System.currentTimeMillis()+40000L);
         p.setAllowFlight(false);Vector v=p.getVelocity();v.setY(0.72);p.setVelocity(v);visual(p,"doublejump",p.getLocation());
-    }
-    @EventHandler public void onCreatorBlockPlace(org.bukkit.event.block.BlockPlaceEvent e) {
-        ItemStack item=e.getItemInHand();
-        if(item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE)) creatorBlocks.add(e.getBlockPlaced().getLocation()); saveCreatorBlocks();
     }
     @EventHandler public void onShieldItemDamage(PlayerItemDamageEvent e) {
         ItemStack item=e.getItem();
@@ -1110,17 +1573,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(hits%5!=0) e.setCancelled(true); else { e.setDamage(item.getType().getMaxDurability()); shieldAxeHits.put(e.getPlayer().getUniqueId(),0); }
     }
     @EventHandler public void onBlockBreak(BlockBreakEvent e) {
-        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); return; }
-        if(creatorBlocks.contains(e.getBlock().getLocation()) && !e.getPlayer().hasPermission("voidenchants.admin")) { e.setCancelled(true); e.getPlayer().sendMessage("§cБлок Творца нельзя сломать."); return; }
-        if(creatorBlocks.contains(e.getBlock().getLocation())) { creatorBlocks.remove(e.getBlock().getLocation()); saveCreatorBlocks(); }
-        if((e.getBlock().getType()==Material.BEDROCK || e.getBlock().getType()==Material.BARRIER) && hasEnchant(held(e.getPlayer()),"creatorhand")) {
-            e.setCancelled(true); Block block=e.getBlock(); block.setType(Material.AIR,false);
-            ItemStack drop=new ItemStack(Material.NETHERITE_BLOCK); ItemMeta meta=drop.getItemMeta();
-            meta.setDisplayName("§c§lБлок Творца"); meta.setLore(List.of("§7Создан зачарованием §cДлань Творца"));
-            meta.getPersistentDataContainer().set(new NamespacedKey(this,"creator_block"),PersistentDataType.BYTE,(byte)1); drop.setItemMeta(meta);
-            if(Math.random()<getConfig().getDouble("admin-enchants.creator-block-chance",0.10)) block.getWorld().dropItemNaturally(block.getLocation(),drop);
-            e.getPlayer().playSound(block.getLocation(),Sound.BLOCK_BEACON_ACTIVATE,1f,1.2f);
-        }
+        if(lavaBlocks.contains(e.getBlock().getLocation())) { e.setCancelled(true); e.setDropItems(false); }
     }
     @EventHandler public void onInteract(PlayerInteractEvent e) {
         if(e.getHand()!=EquipmentSlot.HAND) return;
@@ -1148,7 +1601,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         hitCounters.remove(uid);
         maceHitCounters.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
         sneakSpeeds.remove(uid); berserkBase.remove(uid);
-        doubleJumpCooldown.remove(uid);procCooldowns.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
+        doubleJumpCooldown.remove(uid);procCooldowns.keySet().removeIf(k->k.startsWith(uid.toString()+":"));procCooldownDurations.keySet().removeIf(k->k.startsWith(uid.toString()+":"));
         shadowSince.remove(uid); shadowPositions.remove(uid);
         Integer shadowTask=shadowTasks.remove(uid); if(shadowTask!=null)Bukkit.getScheduler().cancelTask(shadowTask);
         Integer task=radarTasks.remove(uid); if(task!=null) Bukkit.getScheduler().cancelTask(task);
