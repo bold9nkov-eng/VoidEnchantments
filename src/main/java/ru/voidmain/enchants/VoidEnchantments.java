@@ -1066,9 +1066,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                     }
                     d.teleport(pos);
                     d.setTransformation(new org.bukkit.util.Transformation(
-                        new org.joml.Vector3f(-scale/2f,-scale/2f,-scale/2f),
+                        new org.joml.Vector3f((float)(-scale/2f),(float)(-scale/2f),(float)(-scale/2f)),
                         new org.joml.AxisAngle4f((float)(spin+i*0.4),0.35f,1.0f,0.2f),
-                        new org.joml.Vector3f(scale,scale,scale),
+                        new org.joml.Vector3f((float)scale,(float)scale,(float)scale),
                         new org.joml.AxisAngle4f(0,0,1,0)));
                 }
                 if(tick%3==0) {
