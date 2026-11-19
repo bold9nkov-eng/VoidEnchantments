@@ -319,6 +319,28 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             }
         }.runTaskTimer(this,0L,1L);
     }
+    private void playEnchantSound(Player player,String key,Location location) {
+        String sound="voidmain:enchant_"+key;
+        float volume=0.8f, pitch=1.0f;
+        switch(key) {
+            case "godslayer","worldeater" -> { volume=3.0f; pitch=0.78f; }
+            case "blackhole","thunder","dragonbreath","lightaura","immortality" -> { volume=1.65f; pitch=0.9f; }
+            case "moon" -> { volume=0.65f; pitch=1.0f; }
+            case "vampirism","frost","venom","magnet","softsteps","immunity" -> { volume=0.65f; pitch=1.0f; }
+            case "berserk","execution","titanshield","hook","spear_dash","bounce","doublejump" -> { volume=1.0f; pitch=0.95f; }
+            default -> { volume=0.8f; pitch=1.0f; }
+        }
+        if(key.equals("moon") && location.getWorld()!=null) {
+            long time=location.getWorld().getTime();
+            sound=time>=13000L && time<=23000L?"voidmain:enchant_moon_night":"voidmain:enchant_moon_day";
+        }
+        if(key.equals("godslayer") || key.equals("worldeater")) {
+            for(Player viewer:Bukkit.getOnlinePlayers()) viewer.playSound(viewer.getLocation(),sound,volume,pitch);
+        } else {
+            player.playSound(location,sound,volume,pitch);
+        }
+    }
+
     private void visual(Player p,String key,Location l) {
         World w=l.getWorld(); if(w==null)return;
         Spec activated=spec(key);
@@ -333,35 +355,35 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             p.playSound(p.getLocation(),Sound.BLOCK_RESPAWN_ANCHOR_CHARGE,.55f,.75f);
         }
         switch(key) {
-            case "moon" -> { w.spawnParticle(Particle.END_ROD,l,18,.35,.55,.35,.025); spawnVoidRing(l,.8,Color.fromRGB(222,224,255),24); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.75f,.75f); }
-            case "chameleon" -> { w.spawnParticle(Particle.HAPPY_VILLAGER,l,16,.4,.5,.4,.025); w.spawnParticle(Particle.DUST,l,12,.35,.45,.35,0,new Particle.DustOptions(Color.fromRGB(150,93,255),1.1f)); p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.75f,.85f); }
-            case "berserk" -> { w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02); w.spawnParticle(Particle.CRIT,l,16,.35,.45,.35,.1); p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.55f,.85f); }
-            case "godslayer","worldeater" -> { w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,26,.45,.6,.45,.035); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); spawnVoidRing(l,1.05,Color.fromRGB(135,39,214),32); spawnVoidRing(l,.62,Color.fromRGB(230,226,255),20); p.playSound(l,Sound.ENTITY_WITHER_HURT,.72f,.65f); }
-            case "immortality" -> { w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08); spawnVoidRing(l,.85,Color.fromRGB(244,221,255),26); p.playSound(l,Sound.ITEM_TOTEM_USE,1f,1f); }
-            case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> { w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); w.spawnParticle(Particle.ENCHANT,l,22,.5,.5,.5,.45); spawnVoidRing(l,.75,Color.fromRGB(161,75,255),24); p.playSound(l,Sound.ITEM_SHIELD_BLOCK,.9f,1.0f); }
-            case "woodcutter" -> { w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1); w.spawnParticle(Particle.BLOCK,l,10,.3,.4,.3,.1,Material.OAK_LOG.createBlockData()); p.playSound(l,Sound.BLOCK_WOOD_BREAK,.9f,.75f); }
-            case "cleave","axemaster" -> { w.spawnParticle(Particle.SWEEP_ATTACK,l,4,.35,.4,.35,0); w.spawnParticle(Particle.CRIT,l,14,.3,.45,.3,.08); p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.9f,.8f); }
-            case "stun" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); p.playSound(l,Sound.BLOCK_ANVIL_LAND,.8f,1.0f); }
-            case "heaviness" -> { w.spawnParticle(Particle.BLOCK,l,20,.3,.4,.3,.1,Material.ANVIL.createBlockData()); w.spawnParticle(Particle.CLOUD,l,12,.25,.25,.25,.02); p.playSound(l,Sound.BLOCK_CHAIN_HIT,.8f,.7f); }
-            case "fish","diver" -> { w.spawnParticle(Particle.BUBBLE,l,22,.4,.5,.4,.04); w.spawnParticle(Particle.SPLASH,l,10,.3,.25,.3,.04); p.playSound(l,Sound.ENTITY_DOLPHIN_SPLASH,.7f,1.0f); }
-            case "magnet" -> { w.spawnParticle(Particle.ENCHANT,l,22,.3,.4,.3,.5); spawnVoidRing(l,.58,Color.fromRGB(189,151,255),20); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.7f,1.0f); }
-            case "lavawalker" -> { w.spawnParticle(Particle.FLAME,l,18,.5,.1,.5,.02); w.spawnParticle(Particle.LAVA,l,5,.3,.05,.3,0); p.playSound(l,Sound.BLOCK_LAVA_POP,.65f,.8f); }
-            case "waterwalker" -> { w.spawnParticle(Particle.SPLASH,l,20,.5,.2,.5,.1); w.spawnParticle(Particle.BUBBLE,l,12,.4,.2,.4,.03); p.playSound(l,Sound.BLOCK_GLASS_PLACE,.8f,1.0f); }
-            case "blackhole" -> { w.spawnParticle(Particle.PORTAL,l,45,.5,.7,.5,.3); w.spawnParticle(Particle.REVERSE_PORTAL,l,28,.4,.6,.4,.12); spawnVoidRing(l,.9,Color.fromRGB(89,24,135),32); p.playSound(l,Sound.BLOCK_BEACON_DEACTIVATE,.8f,.55f); }
-            case "hook" -> { w.spawnParticle(Particle.CRIT,l,18,.3,.5,.3,.1); w.spawnParticle(Particle.SWEEP_ATTACK,l,2,.2,.2,.2,0); p.playSound(l,Sound.ENTITY_FISHING_BOBBER_RETRIEVE,.9f,.8f); }
-            case "bounce","doublejump","wings","hover" -> { w.spawnParticle(Particle.CLOUD,l,24,.4,.2,.4,.08); w.spawnParticle(Particle.END_ROD,l,10,.3,.25,.3,.02); p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.8f,1.0f); }
-            case "thunder" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,35,.5,.7,.5,.2); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); p.playSound(l,Sound.ENTITY_LIGHTNING_BOLT_THUNDER,.8f,1.0f); }
-            case "phantomblade","shadow" -> { w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03); w.spawnParticle(Particle.REVERSE_PORTAL,l,12,.25,.35,.25,.08); p.playSound(l,Sound.ENTITY_ENDERMAN_TELEPORT,.65f,1.0f); }
-            case "frost" -> { w.spawnParticle(Particle.SNOWFLAKE,l,26,.3,.5,.3,.04); spawnVoidRing(l,.7,Color.fromRGB(158,222,255),22); p.playSound(l,Sound.BLOCK_GLASS_BREAK,.7f,1.0f); }
-            case "venom","immunity" -> { w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02); w.spawnParticle(Particle.DUST,l,12,.3,.45,.3,0,new Particle.DustOptions(Color.fromRGB(85,194,93),1.0f)); p.playSound(l,Sound.ENTITY_WITCH_AMBIENT,.6f,.9f); }
-            case "dragonbreath" -> { w.spawnParticle(Particle.DRAGON_BREATH,l,34,.4,.5,.4,.025); w.spawnParticle(Particle.FLAME,l,12,.3,.3,.3,.015); p.playSound(l,Sound.ENTITY_ENDER_DRAGON_GROWL,.38f,.72f); }
-            case "sniper","armorbreaker","execution" -> { w.spawnParticle(Particle.CRIT,l,24,.35,.5,.35,.08); w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.2,.25,.2,0); p.playSound(l,Sound.ENTITY_PLAYER_ATTACK_CRIT,.8f,.72f); }
-            case "radar","owl","wisdom" -> { w.spawnParticle(Particle.END_ROD,l,14,.3,.55,.3,.015); w.spawnParticle(Particle.ENCHANT,l,18,.35,.5,.35,.25); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_RESONATE,.65f,.7f); }
-            case "softsteps","sneak" -> { w.spawnParticle(Particle.CLOUD,l,12,.25,.08,.25,.01); w.spawnParticle(Particle.DUST,l,8,.25,.1,.25,0,new Particle.DustOptions(Color.fromRGB(181,159,220),.8f)); p.playSound(l,Sound.BLOCK_WOOL_STEP,.5f,.7f); }
-            case "haste","experience","autosmelt","veinminer","drill" -> { w.spawnParticle(Particle.BLOCK,l,22,.35,.45,.35,.1,Material.DEEPSLATE.createBlockData()); w.spawnParticle(Particle.CRIT,l,8,.2,.25,.2,.04); p.playSound(l,Sound.BLOCK_DEEPSLATE_BREAK,.65f,.8f); }
-            case "spear_dash","aerodynamics" -> { w.spawnParticle(Particle.CLOUD,l,24,.35,.25,.35,.045); w.spawnParticle(Particle.END_ROD,l,14,.3,.35,.3,.02); p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.65f,.75f); }
-            case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.72f,.72f); }
-            default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.6f,1.0f); }
+            case "moon" -> { w.spawnParticle(Particle.END_ROD,l,18,.35,.55,.35,.025); spawnVoidRing(l,.8,Color.fromRGB(222,224,255),24); playEnchantSound(p,key,l); }
+            case "chameleon" -> { w.spawnParticle(Particle.HAPPY_VILLAGER,l,16,.4,.5,.4,.025); w.spawnParticle(Particle.DUST,l,12,.35,.45,.35,0,new Particle.DustOptions(Color.fromRGB(150,93,255),1.1f)); playEnchantSound(p,key,l); }
+            case "berserk" -> { w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02); w.spawnParticle(Particle.CRIT,l,16,.35,.45,.35,.1); playEnchantSound(p,key,l); }
+            case "godslayer","worldeater" -> { w.spawnParticle(Particle.SOUL_FIRE_FLAME,l,26,.45,.6,.45,.035); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); spawnVoidRing(l,1.05,Color.fromRGB(135,39,214),32); spawnVoidRing(l,.62,Color.fromRGB(230,226,255),20); playEnchantSound(p,key,l); }
+            case "immortality" -> { w.spawnParticle(Particle.TOTEM_OF_UNDYING,l,35,.4,.6,.4,.08); spawnVoidRing(l,.85,Color.fromRGB(244,221,255),26); playEnchantSound(p,key,l); }
+            case "reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield" -> { w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); w.spawnParticle(Particle.ENCHANT,l,22,.5,.5,.5,.45); spawnVoidRing(l,.75,Color.fromRGB(161,75,255),24); playEnchantSound(p,key,l); }
+            case "woodcutter" -> { w.spawnParticle(Particle.CRIT,l,24,.4,.6,.4,.1); w.spawnParticle(Particle.BLOCK,l,10,.3,.4,.3,.1,Material.OAK_LOG.createBlockData()); playEnchantSound(p,key,l); }
+            case "cleave","axemaster" -> { w.spawnParticle(Particle.SWEEP_ATTACK,l,4,.35,.4,.35,0); w.spawnParticle(Particle.CRIT,l,14,.3,.45,.3,.08); playEnchantSound(p,key,l); }
+            case "stun" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,25,.4,.6,.4,.1); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); playEnchantSound(p,key,l); }
+            case "heaviness" -> { w.spawnParticle(Particle.BLOCK,l,20,.3,.4,.3,.1,Material.ANVIL.createBlockData()); w.spawnParticle(Particle.CLOUD,l,12,.25,.25,.25,.02); playEnchantSound(p,key,l); }
+            case "fish","diver" -> { w.spawnParticle(Particle.BUBBLE,l,22,.4,.5,.4,.04); w.spawnParticle(Particle.SPLASH,l,10,.3,.25,.3,.04); playEnchantSound(p,key,l); }
+            case "magnet" -> { w.spawnParticle(Particle.ENCHANT,l,22,.3,.4,.3,.5); spawnVoidRing(l,.58,Color.fromRGB(189,151,255),20); playEnchantSound(p,key,l); }
+            case "lavawalker" -> { w.spawnParticle(Particle.FLAME,l,18,.5,.1,.5,.02); w.spawnParticle(Particle.LAVA,l,5,.3,.05,.3,0); playEnchantSound(p,key,l); }
+            case "waterwalker" -> { w.spawnParticle(Particle.SPLASH,l,20,.5,.2,.5,.1); w.spawnParticle(Particle.BUBBLE,l,12,.4,.2,.4,.03); playEnchantSound(p,key,l); }
+            case "blackhole" -> { w.spawnParticle(Particle.PORTAL,l,45,.5,.7,.5,.3); w.spawnParticle(Particle.REVERSE_PORTAL,l,28,.4,.6,.4,.12); spawnVoidRing(l,.9,Color.fromRGB(89,24,135),32); playEnchantSound(p,key,l); }
+            case "hook" -> { w.spawnParticle(Particle.CRIT,l,18,.3,.5,.3,.1); w.spawnParticle(Particle.SWEEP_ATTACK,l,2,.2,.2,.2,0); playEnchantSound(p,key,l); }
+            case "bounce","doublejump","wings","hover" -> { w.spawnParticle(Particle.CLOUD,l,24,.4,.2,.4,.08); w.spawnParticle(Particle.END_ROD,l,10,.3,.25,.3,.02); playEnchantSound(p,key,l); }
+            case "thunder" -> { w.spawnParticle(Particle.ELECTRIC_SPARK,l,35,.5,.7,.5,.2); w.spawnParticle(Particle.FLASH,l,1,0,0,0,0); playEnchantSound(p,key,l); }
+            case "phantomblade","shadow" -> { w.spawnParticle(Particle.SMOKE,l,24,.4,.6,.4,.03); w.spawnParticle(Particle.REVERSE_PORTAL,l,12,.25,.35,.25,.08); playEnchantSound(p,key,l); }
+            case "frost" -> { w.spawnParticle(Particle.SNOWFLAKE,l,26,.3,.5,.3,.04); spawnVoidRing(l,.7,Color.fromRGB(158,222,255),22); playEnchantSound(p,key,l); }
+            case "venom","immunity" -> { w.spawnParticle(Particle.SPORE_BLOSSOM_AIR,l,18,.3,.5,.3,.02); w.spawnParticle(Particle.DUST,l,12,.3,.45,.3,0,new Particle.DustOptions(Color.fromRGB(85,194,93),1.0f)); playEnchantSound(p,key,l); }
+            case "dragonbreath" -> { w.spawnParticle(Particle.DRAGON_BREATH,l,34,.4,.5,.4,.025); w.spawnParticle(Particle.FLAME,l,12,.3,.3,.3,.015); playEnchantSound(p,key,l); }
+            case "sniper","armorbreaker","execution" -> { w.spawnParticle(Particle.CRIT,l,24,.35,.5,.35,.08); w.spawnParticle(Particle.SWEEP_ATTACK,l,3,.2,.25,.2,0); playEnchantSound(p,key,l); }
+            case "radar","owl","wisdom" -> { w.spawnParticle(Particle.END_ROD,l,14,.3,.55,.3,.015); w.spawnParticle(Particle.ENCHANT,l,18,.35,.5,.35,.25); playEnchantSound(p,key,l); }
+            case "softsteps","sneak" -> { w.spawnParticle(Particle.CLOUD,l,12,.25,.08,.25,.01); w.spawnParticle(Particle.DUST,l,8,.25,.1,.25,0,new Particle.DustOptions(Color.fromRGB(181,159,220),.8f)); playEnchantSound(p,key,l); }
+            case "haste","experience","autosmelt","veinminer","drill" -> { w.spawnParticle(Particle.BLOCK,l,22,.35,.45,.35,.1,Material.DEEPSLATE.createBlockData()); w.spawnParticle(Particle.CRIT,l,8,.2,.25,.2,.04); playEnchantSound(p,key,l); }
+            case "spear_dash","aerodynamics" -> { w.spawnParticle(Particle.CLOUD,l,24,.35,.25,.35,.045); w.spawnParticle(Particle.END_ROD,l,14,.3,.35,.3,.02); playEnchantSound(p,key,l); }
+            case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); playEnchantSound(p,key,l); }
+            default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); playEnchantSound(p,key,l); }
         }
     }
     private void sendHelp(CommandSender sender, boolean admin) {
@@ -597,79 +619,49 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Integer value=marker.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
         return value==null?0:value;
     }
-    private void openCatalog(Player p,int page) { openCatalog(p,"swords",page); }
-    private void openCatalog(Player p,String category,int page) {
-        boolean validCategory=false;
-        for(Category c:categories) if(c.key().equals(category)) { validCategory=true; break; }
-        if(!validCategory) category="swords";
-        final String selectedCategory=category;
-        List<Spec> filtered=specs.stream().filter(x->belongsToCategory(x,selectedCategory)).toList();
-        int pageSize=36;
-        int maxPage=Math.max(0,(filtered.size()-1)/pageSize);
+    private void openCatalog(Player p,int page) {
+        int pageSize=45;
+        int maxPage=Math.max(0,(specs.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
-        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE+" §8| "+gradient(categoryName(category),3));
-        for(int slot=0;slot<54;slot++) {
-            ItemStack panel=new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-            ItemMeta panelMeta=panel.getItemMeta();
-            panelMeta.setDisplayName(" ");
-            panelMeta.setItemModel(NamespacedKey.fromString("voidmain:gui_panel"));
-            panel.setItemMeta(panelMeta);
-            inv.setItem(slot,panel);
-        }
-        for(int i=0;i<categories.size();i++) {
-            Category c=categories.get(i);
-            ItemStack tab=new ItemStack(c.icon()); ItemMeta tm=tab.getItemMeta();
-            tm.setDisplayName(c.key().equals(category)?gradient("◆ "+c.title(),3):"§8"+c.title());
-            tm.setLore(List.of("§8§oVOIDMAIN / ENCHANTMENTS","",c.key().equals(category)?"§d✦ §fВыбрана":"§7Нажми, чтобы открыть"));
-            tm.setItemModel(NamespacedKey.fromString("voidmain:gui_tab_"+c.key()));
-            tm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,c.key());
-            tab.setItemMeta(tm); inv.setItem(i,tab);
-        }
+        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
         int start=page*pageSize;
-        for(int i=0;i<pageSize && start+i<filtered.size();i++) {
-            Spec spec=filtered.get(start+i);
-            ItemStack icon=new ItemStack(spec.icon()); ItemMeta meta=icon.getItemMeta();
-            int tier=rarityTier(spec);
-            meta.setDisplayName(gradient(specName(spec),tier));
-            meta.setLore(List.of("§7"+specDescription(spec),"","§7Предмет: §f"+appliesTo(spec),
+        for(int i=0;i<pageSize && start+i<specs.size();i++) {
+            Spec s=specs.get(start+i);
+            ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
+            int tier=rarityTier(s);
+            m.setDisplayName(gradient(specName(s),tier));
+            m.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
-                "§7Уровни: §f"+(spec.leveled()?"I–"+roman(maxLevel(spec)):"Без уровней"),
-                "§7Шанс выпадения: §f"+chanceText(spec),
-                "",spec.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы посмотреть / получить"));
-            meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,spec.key());
-            icon.setItemMeta(meta); inv.setItem(9+i,icon);
+                "§7Уровни: §f"+(s.leveled()?"I–"+roman(maxLevel(s)):"Без уровней"),
+                "",s.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
+            m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
+            icon.setItemMeta(m); inv.setItem(i,icon);
         }
+
         ItemStack previous=new ItemStack(page>0?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta pm=previous.getItemMeta();
         pm.setDisplayName(page>0?"§d← Предыдущая страница":"§8Первая страница");
         pm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        pm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.max(0,page-1));
+        pm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.max(0,page-1));
         previous.setItemMeta(pm); inv.setItem(45,previous);
 
-        ItemStack pageInfo=new ItemStack(Material.CLOCK); ItemMeta pim=pageInfo.getItemMeta();
-        pim.setDisplayName("§dСтраница §f"+(page+1)+"§8/§f"+(maxPage+1));
-        pim.setLore(List.of("§7Категория: §f"+categoryName(category),"§7Всего чар: §f"+filtered.size()));
-        pim.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,page);
-        pageInfo.setItemMeta(pim); inv.setItem(49,pageInfo);
-
         ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
-        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(50,close);
+        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
 
         ItemStack next=new ItemStack(page<maxPage?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta nm=next.getItemMeta();
         nm.setDisplayName(page<maxPage?"§dСледующая страница →":"§8Последняя страница");
         nm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        nm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
+        nm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
         next.setItemMeta(nm); inv.setItem(53,next);
         p.openInventory(inv);
     }
-    private void openLevelMenu(Player p,Spec s,String category,int page) {
+    private void openLevelMenu(Player p,Spec s) {
         Inventory inv=Bukkit.createInventory(null,27,LEVEL_TITLE);
         int tier=rarityTier(s);
         for(int lvl=1;lvl<=maxLevel(s);lvl++) {
-            ItemStack icon=new ItemStack(Material.PAPER); ItemMeta meta=icon.getItemMeta();
+            ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
             meta.setDisplayName(gradient(specName(s),tier)+" §7"+roman(lvl));
-            meta.setItemModel(NamespacedKey.fromString("voidmain:scroll_tier_"+tier));
             meta.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
@@ -678,17 +670,14 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             icon.setItemMeta(meta); inv.setItem(10+lvl,icon);
         }
         ItemStack back=new ItemStack(Material.ARROW); ItemMeta bm=back.getItemMeta();
-        bm.setDisplayName("§eНазад к зачарованиям");
-        bm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category);
-        bm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,page);
-        back.setItemMeta(bm); inv.setItem(18,back);
+        bm.setDisplayName("§eНазад к зачарованиям"); back.setItemMeta(bm); inv.setItem(18,back);
         ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
         cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(26,close);
         p.openInventory(inv);
     }
     @EventHandler public void onCatalogDrag(InventoryDragEvent e) {
         String title = e.getView().getTitle();
-        if (title.equals(ADMIN_TITLE) || title.startsWith(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
+        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
     }
 
     @EventHandler public void onCatalog(InventoryClickEvent e) {
@@ -726,11 +715,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             ItemStack clicked=e.getCurrentItem();
             if(clicked==null || clicked.getType()==Material.AIR) return;
             if(e.getRawSlot()==26) { p.closeInventory(); return; }
-            if(e.getRawSlot()==18) {
-                String category=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
-                Integer page=clicked.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
-                openCatalog(p,category==null?"swords":category,page==null?0:page); return;
-            }
+            if(e.getRawSlot()==18) { openCatalog(p,0); return; }
             Spec selected=findSpec(id(clicked));
             if(selected==null || !selected.leveled()) return;
             int lvl=level(clicked);
@@ -740,42 +725,33 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             p.sendMessage(gradient("✦ Получена книга: "+specName(selected)+" "+roman(lvl)));
             p.closeInventory(); return;
         }
-        if(!title.startsWith(CATALOG_TITLE)) return;
+        if(!title.equals(CATALOG_TITLE)) return;
         e.setCancelled(true);
+        if (!p.hasPermission("voidenchants.admin")) {
+            if (e.getRawSlot() >= 0 && e.getRawSlot() < 54) {
+                ItemStack preview = e.getCurrentItem();
+                if (preview != null && preview.getType() != Material.AIR) {
+                    Spec info = findSpec(id(preview));
+                    if (info != null) sendSpecInfo(p, info);
+                }
+            }
+            return;
+        }
         if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
         ItemStack clicked=e.getCurrentItem();
         if(clicked==null || clicked.getType()==Material.AIR) return;
-        if(e.getRawSlot()<9) {
-            String next=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
-            if(next!=null) {
-                p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.3f);
-                openCatalog(p,next,0);
-            }
-            return;
-        }
-        String category=currentCatalogCategory(e.getView().getTopInventory());
-        int page=currentCatalogPage(e.getView().getTopInventory());
-        if(!p.hasPermission("voidenchants.admin")) {
-            if(e.getRawSlot()>=9 && e.getRawSlot()<45) {
-                Spec info=findSpec(id(clicked));
-                if(info!=null) sendSpecInfo(p,info);
-            }
-            return;
-        }
-        if(e.getRawSlot()==50) { p.closeInventory(); return; }
-        if(e.getRawSlot()==49) return;
+        if(e.getRawSlot()==49 && clicked.getType()==Material.BARRIER) { p.closeInventory(); return; }
         if(e.getRawSlot()==45 || e.getRawSlot()==53) {
-            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
             if(targetPage!=null) {
                 p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f);
-                openCatalog(p,category,targetPage);
+                openCatalog(p,targetPage);
             }
             return;
         }
-        if(e.getRawSlot()<9 || e.getRawSlot()>=45) return;
         Spec selected=findSpec(id(clicked));
         if(selected==null) return;
-        if(selected.leveled()) { openLevelMenu(p,selected,category,page); return; }
+        if(selected.leveled()) { openLevelMenu(p,selected); return; }
         giveBook(p,selected,1);
         p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.5f);
         p.sendMessage(gradient("✦ Получена книга: "+specName(selected)));
