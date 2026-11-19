@@ -1017,15 +1017,16 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         final Location base=origin.clone().add(0,0.15,0);
         final int count=key.equals("blackhole")||key.equals("worldeater")?9:7;
         for(int i=0;i<count;i++) {
+            final int index=i;
             Location at=base.clone().add(0,0.8,0);
             BlockDisplay display=world.spawn(at,BlockDisplay.class,entity->{
-                entity.setBlock(palette[iSafe(i,palette.length)].createBlockData());
+                entity.setBlock(palette[iSafe(index,palette.length)].createBlockData());
                 entity.setPersistent(false);
                 entity.setInvulnerable(true);
                 entity.setGravity(false);
                 entity.setShadowRadius(0.0f);
                 entity.setViewRange(0.8f);
-                float size=(i==0?0.58f:0.27f);
+                float size=(index==0?0.58f:0.27f);
                 entity.setTransformation(new org.bukkit.util.Transformation(
                     new org.joml.Vector3f(-size/2f,-size/2f,-size/2f),
                     new org.joml.AxisAngle4f(0,0,1,0),
