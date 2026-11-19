@@ -573,7 +573,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         int pageSize=36;
         int maxPage=Math.max(0,(filtered.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
-        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE+" §8| §d"+categoryName(category));
+        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE+" §8| "+gradient(categoryName(category),3));
         for(int slot=0;slot<54;slot++) {
             ItemStack panel=new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
             ItemMeta panelMeta=panel.getItemMeta();
@@ -585,7 +585,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         for(int i=0;i<categories.size();i++) {
             Category c=categories.get(i);
             ItemStack tab=new ItemStack(c.icon()); ItemMeta tm=tab.getItemMeta();
-            tm.setDisplayName((c.key().equals(category)?"§d§l◆ ":"§8")+c.title());
+            tm.setDisplayName(c.key().equals(category)?gradient("◆ "+c.title(),3):"§8"+c.title());
             tm.setLore(List.of("§8§oVOIDMAIN / ENCHANTMENTS","",c.key().equals(category)?"§d✦ §fВыбрана":"§7Нажми, чтобы открыть"));
             tm.setItemModel(NamespacedKey.fromString("voidmain:gui_tab_"+c.key()));
             tm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,c.key());
