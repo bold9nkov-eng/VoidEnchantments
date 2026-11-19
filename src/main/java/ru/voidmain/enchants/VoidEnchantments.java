@@ -520,7 +520,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private void giveBook(Player p,Spec s,int lvl) {
         Map<Integer,ItemStack> rest=p.getInventory().addItem(book(s,lvl));
         rest.values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it));
-        p.playSound(p.getLocation(),"voidmain:book_pickup",0.9f,1.0f);
+        p.playSound(p.getLocation(),"minecraft:ui.toast.challenge_complete",0.75f,1.15f);
         p.playSound(p.getLocation(),"minecraft:entity.experience_orb.pickup",0.55f,1.2f);
     }
     private void sendSpecInfo(CommandSender sender,Spec s) {
@@ -538,7 +538,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         for(ItemStack item:p.getInventory().getArmorContents()) changed|=removeEnchantFromItem(item,s);
         changed|=removeEnchantFromItem(p.getInventory().getItemInOffHand(),s);
         p.updateInventory();
-        if(changed) p.playSound(p.getLocation(),"voidmain:enchant_remove",0.8f,1.0f);
+        if(changed) p.playSound(p.getLocation(),"minecraft:block.grindstone.use",0.85f,1.0f);
         return changed;
     }
     private boolean removeEnchantFromItem(ItemStack item,Spec s) {
@@ -934,10 +934,10 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(id(left)==null && id(right)==null) return;
         ItemStack result=e.getView().getTopInventory().getItem(2);
         if(result!=null && result.getType()!=Material.AIR && id(result)!=null) {
-            p.playSound(p.getLocation(),"voidmain:enchant_apply",0.9f,1.0f);
+            p.playSound(p.getLocation(),"minecraft:block.enchantment_table.use",0.9f,1.08f);
             p.playSound(p.getLocation(),"minecraft:block.amethyst_block.chime",0.5f,1.3f);
         } else {
-            p.playSound(p.getLocation(),"voidmain:enchant_fail",0.9f,0.9f);
+            p.playSound(p.getLocation(),"minecraft:entity.villager.no",0.9f,0.82f);
             p.playSound(p.getLocation(),"minecraft:entity.villager.no",0.55f,0.85f);
         }
     }
