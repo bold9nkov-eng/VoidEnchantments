@@ -63,7 +63,7 @@ compatibility:
     - name: shield-active-skills
       enchants: [titanshield, lightaura, secondwind, bloodsucker, shove]
     - name: armor-survival
-      enchants: [immortality, immunity, dragonbreath, chameleon]
+      enchants: [immortality, immunity, dragonbreath]
 
 messages:
   divine-broadcast:
@@ -116,7 +116,6 @@ drop-chance:
   bounce: 0.05
   waterwalker: 4.0
   moon: 0.15
-  chameleon: 0.5
   berserk: 0.5
   reflection: 0.5
   secondwind: 0.5
@@ -333,7 +332,6 @@ enchantments:
     description: "Ночью +30% урона, днём −30% урона"
     max-level: 1
     rarity-tier: 2
-  chameleon:
     name: "Хамелеон"
     description: "Эффекты зависят от биома"
     max-level: 1
