@@ -573,6 +573,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 Spec selected=findSpec(args[1]); ItemStack hand=p.getInventory().getItemInMainHand();
                 if(selected==null || hand.getType()==Material.AIR) { sender.sendMessage("§cУкажи зачарование и держи предмет в руке."); return true; }
                 boolean removed=removeEnchantFromItem(hand,selected); p.updateInventory();
+                if(removed) p.playSound(p.getLocation(),"voidmain:enchant_remove",0.8f,1.0f);
                 sender.sendMessage(removed?"§aЗачарование снято с предмета в руке.":"§eНа предмете нет этого зачарования.");
             }
             case "remove" -> {
