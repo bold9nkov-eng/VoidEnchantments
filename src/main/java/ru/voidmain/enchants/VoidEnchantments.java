@@ -278,8 +278,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             String bar="§d"+"▰".repeat(filled)+"§8"+"▱".repeat(10-filled);
             active.add("§5✦ "+gradient(specName(sp),rarityTier(sp))+" §8["+bar+"§8] §f"+String.format(Locale.US,"%.1f",left/1000.0)+"с");
         }
-        String output=active.isEmpty()?"":String.join(" §8◆ ",active.subList(0,Math.min(2,active.size())));
-        if(active.size()>2) output+=" §8+"+(active.size()-2);
+        int maxVisible=Math.max(1,Math.min(4,getConfig().getInt("cooldowns.actionbar.max-visible",2)));
+        String output=active.isEmpty()?"":String.join(" §8◆ ",active.subList(0,Math.min(maxVisible,active.size())));
+        if(active.size()>maxVisible) output+=" §8+"+(active.size()-maxVisible);
         p.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(output));
     }
     private double defaultDropChance(Spec s) { return switch(rarityTier(s)) { case 1 -> 0.05; case 2 -> 0.15; case 3 -> 0.50; case 4 -> 1.50; default -> 4.00; }; }
