@@ -444,8 +444,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private void giveBook(Player p,Spec s,int lvl) {
         Map<Integer,ItemStack> rest=p.getInventory().addItem(book(s,lvl));
         rest.values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it));
-        p.playSound(p.getLocation(),Sound.BLOCK_ENCHANTMENT_TABLE_USE,0.85f,0.85f);
-        p.playSound(p.getLocation(),Sound.BLOCK_AMETHYST_BLOCK_CHIME,0.5f,1.25f);
+        p.playSound(p.getLocation(),"voidmain:book_pickup",0.9f,1.0f);
+        p.playSound(p.getLocation(),"minecraft:entity.experience_orb.pickup",0.55f,1.2f);
     }
     private void sendSpecInfo(CommandSender sender,Spec s) {
         int tier=rarityTier(s);
@@ -462,6 +462,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         for(ItemStack item:p.getInventory().getArmorContents()) changed|=removeEnchantFromItem(item,s);
         changed|=removeEnchantFromItem(p.getInventory().getItemInOffHand(),s);
         p.updateInventory();
+        if(changed) p.playSound(p.getLocation(),"voidmain:enchant_remove",0.8f,1.0f);
         return changed;
     }
     private boolean removeEnchantFromItem(ItemStack item,Spec s) {
