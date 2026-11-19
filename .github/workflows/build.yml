@@ -18,7 +18,7 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Build
-        run: mvn -B clean package
+        run: mvn -B package
       - name: Verify JAR
         run: test -f target/VoidEnchantments-3.3.0.jar
       - uses: actions/upload-artifact@v5
