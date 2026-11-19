@@ -141,9 +141,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
 
     private Spec spec(String key) { return specs.stream().filter(s -> s.key().equalsIgnoreCase(key)).findFirst().orElse(null); }
-    private String specName(Spec s) { return getConfig().getString("enchantments."+s.key()+".name",specName(s)); }
-    private String specDescription(Spec s) { return getConfig().getString("enchantments."+s.key()+".description",specDescription(s)); }
-    private int maxLevel(Spec s) { return Math.max(1,Math.min(10,getConfig().getInt("enchantments."+s.key()+".max-level",maxLevel(s)))); }
+    private String specName(Spec s) { return getConfig().getString("enchantments."+s.key()+".name",s.name()); }
+    private String specDescription(Spec s) { return getConfig().getString("enchantments."+s.key()+".description",s.lore()); }
+    private int maxLevel(Spec s) { return Math.max(1,Math.min(10,getConfig().getInt("enchantments."+s.key()+".max-level",s.max()))); }
     private NamespacedKey itemEnchantKey(String key) { return new NamespacedKey(this, "ce_" + key); }
     private Set<String> enchantKeys(ItemStack item) {
         Set<String> keys=new LinkedHashSet<>();
@@ -533,8 +533,11 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private void openCatalog(Player p,int page) { openCatalog(p,"swords",page); }
     private void openCatalog(Player p,String category,int page) {
-        if(categories.stream().noneMatch(c->c.key().equals(category))) category="swords";
-        List<Spec> filtered=specs.stream().filter(x->belongsToCategory(x,category)).toList();
+        boolean validCategory=false;
+        for(Category c:categories) if(c.key().equals(category)) { validCategory=true; break; }
+        if(!validCategory) category="swords";
+        final String selectedCategory=category;
+        List<Spec> filtered=specs.stream().filter(x->belongsToCategory(x,selectedCategory)).toList();
         int pageSize=36;
         int maxPage=Math.max(0,(filtered.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
