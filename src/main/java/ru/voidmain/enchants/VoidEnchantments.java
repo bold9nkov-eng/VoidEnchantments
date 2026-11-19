@@ -30,6 +30,8 @@ import java.util.*;
 public final class VoidEnchantments extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
     private NamespacedKey enchantKey;
     private NamespacedKey levelKey;
+    private NamespacedKey categoryKey;
+    private NamespacedKey pageKey;
     private final Set<UUID> drilling = new HashSet<>();
     private final Map<UUID, Integer> hitCounters = new HashMap<>();
     private final Map<UUID, Long> hoverTicks = new HashMap<>();
@@ -52,6 +54,18 @@ public final class VoidEnchantments extends JavaPlugin implements Listener, Comm
     private static final String LEVEL_TITLE = "§0✦ §5VoidMain §8| §dВыбор уровня";
 
     private record Spec(String key, String name, String lore, Material icon, int max, boolean leveled) {}
+    private record Category(String key, String title, Material icon) {}
+    private final List<Category> categories = List.of(
+        new Category("swords","⚔ Мечи",Material.NETHERITE_SWORD),
+        new Category("axes","🪓 Топоры",Material.NETHERITE_AXE),
+        new Category("mace","🔨 Булава",Material.MACE),
+        new Category("pickaxes","⛏ Кирки",Material.NETHERITE_PICKAXE),
+        new Category("armor","🛡 Броня",Material.DIAMOND_CHESTPLATE),
+        new Category("shields","🔰 Щиты",Material.SHIELD),
+        new Category("bows","🏹 Луки",Material.BOW),
+        new Category("spears","🔱 Копья",Material.TRIDENT),
+        new Category("elytra","🪽 Элитры",Material.ELYTRA)
+    );
     private final List<Spec> specs = List.of(
         new Spec("magnet","Магнит","Добытые предметы притягиваются прямо в инвентарь",Material.IRON_INGOT,1,false),
         new Spec("woodcutter","Дровосек","Ломает связанные брёвна дерева",Material.IRON_AXE,1,false),
@@ -112,6 +126,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     @Override public void onEnable() {
         enchantKey = new NamespacedKey(this,"custom_enchant");
         levelKey = new NamespacedKey(this,"custom_level");
+        categoryKey = new NamespacedKey(this,"catalog_category");
+        pageKey = new NamespacedKey(this,"catalog_page");
         for (Spec s : specs) if (!s.leveled()) singleTier.add(s.key());
         getServer().getPluginManager().registerEvents(this,this);
         Objects.requireNonNull(getCommand("voidenchants")).setExecutor(this);
@@ -125,6 +141,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
 
     private Spec spec(String key) { return specs.stream().filter(s -> s.key().equalsIgnoreCase(key)).findFirst().orElse(null); }
+    private String specName(Spec s) { return getConfig().getString("enchantments."+s.key()+".name",specName(s)); }
+    private String specDescription(Spec s) { return getConfig().getString("enchantments."+s.key()+".description",specDescription(s)); }
+    private int maxLevel(Spec s) { return Math.max(1,Math.min(10,getConfig().getInt("enchantments."+s.key()+".max-level",maxLevel(s)))); }
     private NamespacedKey itemEnchantKey(String key) { return new NamespacedKey(this, "ce_" + key); }
     private Set<String> enchantKeys(ItemStack item) {
         Set<String> keys=new LinkedHashSet<>();
@@ -155,7 +174,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Integer n = item.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
         return n == null ? 1 : n;
     }
-    private int rarityTier(Spec s) { return switch(s.key()) {
+    private int rarityTier(Spec s) { int fallback = switch(s.key()) {
         case "godslayer","worldeater","immortality","creatorhand" -> 0;
         case "thunder","lightaura" -> 1;
         case "blackhole","spear_dash","stun" -> 1;
@@ -174,7 +193,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         case "veinminer","hover","lavawalker","dragonbreath" -> 3;
         case "magnet","autosmelt","experience","frost","venom","immunity","softsteps" -> 4;
         default -> 5;
-    }; }
+    }; return Math.max(0,Math.min(5,getConfig().getInt("enchantments."+s.key()+".rarity-tier",fallback))); }
     private String rarityName(int t) { return switch(t) {
         case 0 -> "АДМИНСКОЕ"; case 1 -> "Божественное"; case 2 -> "Легендарное"; case 3 -> "Эпическое"; case 4 -> "Редкое"; default -> "Необычное";
     }; }
@@ -209,8 +228,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         ItemStack item = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta m = item.getItemMeta();
         int tier=rarityTier(s);
-        m.setDisplayName(gradient(s.name(),tier));
-        m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+        m.setDisplayName(gradient(specName(s),tier));
+        m.setItemModel(NamespacedKey.fromString("voidmain:enchant_scroll"));
+        m.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
             "§7Редкость: "+rarityColor(tier)+rarityName(tier),
             "§7Уровень: §f"+(s.leveled()?roman(lvl):"I"),"","§8VoidMain Enchantments"));
         m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
@@ -252,7 +272,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         List<String> lines=new ArrayList<>();
         for(Spec sp:specs) {
             long left=cooldownLeft(p.getUniqueId(),sp.key());
-            if(left>0 && has(p,sp.key())) lines.add(getConfig().getString("cooldowns.actionbar.format","§d{enchant}: §f{seconds}с").replace("{enchant}",sp.name()).replace("{seconds}",String.valueOf((left+999)/1000)));
+            if(left>0 && has(p,sp.key())) lines.add(getConfig().getString("cooldowns.actionbar.format","§d{enchant}: §f{seconds}с").replace("{enchant}",specName(sp)).replace("{seconds}",String.valueOf((left+999)/1000)));
         }
         p.sendActionBar(Component.text(lines.isEmpty()?"":String.join(getConfig().getString("cooldowns.actionbar.separator"," §8| "),lines)));
     }
@@ -261,7 +281,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     private double totalDropWeight() { return specs.stream().filter(x->isEnabled(x.key()) && rarityTier(x)>0).mapToDouble(this::dropChance).sum(); }
     private String chanceText(Spec s) { if(rarityTier(s)==0) return "только админам"; double total=totalDropWeight(); double percent=total<=0?0:dropChance(s)/total*100.0; return String.format(Locale.US,"%.4f",percent).replaceAll("\\.?0+$","")+"%"; }
     private boolean ready(Player p,String key,long ms) {String k=p.getUniqueId()+":"+key;long now=System.currentTimeMillis();if(now<procCooldowns.getOrDefault(k,0L))return false;procCooldowns.put(k,now+ms);return true;}
-    private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;switch(key) {
+    private void visual(Player p,String key,Location l) {World w=l.getWorld();if(w==null)return;
+        p.playSound(l,"voidmain:enchant/"+key,SoundCategory.PLAYERS,0.65f,1.0f);
+        switch(key) {
         case "moon" -> {w.spawnParticle(Particle.END_ROD,l,12,.3,.5,.3,.02);p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.8f,1.8f);}
         case "chameleon" -> {w.spawnParticle(Particle.HAPPY_VILLAGER,l,20,.4,.5,.4,.03);p.playSound(l,Sound.BLOCK_BEACON_POWER_SELECT,.8f,1.2f);}
         case "berserk" -> {w.spawnParticle(Particle.ANGRY_VILLAGER,l,8,.3,.4,.3,.02);p.playSound(l,Sound.ENTITY_RAVAGER_ROAR,.5f,1.4f);}
@@ -310,20 +332,21 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
     }
     private int parseLevel(Spec s,String raw) {
         if(!s.leveled()) return 1;
-        try { return Math.max(1,Math.min(s.max(),Integer.parseInt(raw))); }
+        try { return Math.max(1,Math.min(maxLevel(s),Integer.parseInt(raw))); }
         catch(Exception ignored) { return 1; }
     }
     private void giveBook(Player p,Spec s,int lvl) {
         Map<Integer,ItemStack> rest=p.getInventory().addItem(book(s,lvl));
         rest.values().forEach(it->p.getWorld().dropItemNaturally(p.getLocation(),it));
+        p.playSound(p.getLocation(),"voidmain:scroll_open",SoundCategory.PLAYERS,0.9f,1.0f);
     }
     private void sendSpecInfo(CommandSender sender,Spec s) {
         int tier=rarityTier(s);
-        sender.sendMessage("§5✦ §l"+s.name()+" §8("+s.key()+")");
-        sender.sendMessage("§7Описание: §f"+s.lore());
+        sender.sendMessage("§5✦ §l"+specName(s)+" §8("+s.key()+")");
+        sender.sendMessage("§7Описание: §f"+specDescription(s));
         sender.sendMessage("§7Предмет: §f"+appliesTo(s));
         sender.sendMessage("§7Редкость: "+rarityColor(tier)+rarityName(tier));
-        sender.sendMessage("§7Уровни: §f"+(s.leveled()?"I–"+roman(s.max()):"без уровней"));
+        sender.sendMessage("§7Уровни: §f"+(s.leveled()?"I–"+roman(maxLevel(s)):"без уровней"));
         sender.sendMessage("§7Статус: "+(isEnabled(s.key())?"§aвключено":"§cотключено"));
     }
     private boolean removeEnchant(Player p,Spec s) {
@@ -343,7 +366,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             meta.getPersistentDataContainer().remove(levelKey);
         }
         List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
-        lore.removeIf(line->ChatColor.stripColor(line).startsWith(s.name()));
+        lore.removeIf(line->ChatColor.stripColor(line).startsWith(specName(s)));
         meta.setLore(lore.isEmpty()?null:lore);
         item.setItemMeta(meta);
         return true;
@@ -353,8 +376,8 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         for(int i=0;i<specs.size() && i<45;i++) {
             Spec s=specs.get(i); int tier=rarityTier(s);
             ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            m.setDisplayName(gradient(s.name(),tier));
-            m.setLore(List.of("§7"+s.lore(),"§7Предмет: §f"+appliesTo(s),
+            m.setDisplayName(gradient(specName(s),tier));
+            m.setLore(List.of("§7"+specDescription(s),"§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Эффект: "+(isEnabled(s.key())?"§aВКЛЮЧЁН":"§cВЫКЛЮЧЕН"),
                 "§7Шанс выбора: §f"+chanceText(s),
@@ -381,7 +404,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(sub.equals("help")) { sendHelp(sender,admin); return true; }
         if(sub.equals("list")) {
             sender.sendMessage("§5§lVoidMain §8| §dКастомные зачарования:");
-            for(Spec s:specs) sender.sendMessage(rarityColor(rarityTier(s))+"• "+s.name()+" §8— §7"+s.key()+" §8| §f"+appliesTo(s));
+            for(Spec s:specs) sender.sendMessage(rarityColor(rarityTier(s))+"• "+specName(s)+" §8— §7"+s.key()+" §8| §f"+appliesTo(s));
             return true;
         }
         if(sub.equals("info") || sub.equals("инфо")) {
@@ -410,7 +433,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 Player target=Bukkit.getPlayerExact(args[1]); Spec s=findSpec(args[2]);
                 if(target==null || s==null) { sender.sendMessage("§cИгрок или зачарование не найдено."); return true; }
                 int lvl=args.length>3?parseLevel(s,args[3]):1; giveBook(target,s,lvl);
-                sender.sendMessage(gradient("Выдано игроку "+target.getName()+": "+s.name()+" "+roman(lvl)));
+                sender.sendMessage(gradient("Выдано игроку "+target.getName()+": "+specName(s)+" "+roman(lvl)));
             }
             case "giveall" -> {
                 if(args.length<2) { sender.sendMessage("§c/ve giveall <чар> [уровень]"); return true; }
@@ -454,7 +477,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 sender.sendMessage("§5§lVoidMain §8| §dВыпадение книг с жителей");
                 for(Spec s:specs) {
                     int count=getConfig().getInt("drop-count."+s.key(),0);
-                    sender.sendMessage(rarityColor(rarityTier(s))+s.name()+" §8— §f"+count+" §7шт. §8| §7шанс "+chanceText(s));
+                    sender.sendMessage(rarityColor(rarityTier(s))+specName(s)+" §8— §f"+count+" §7шт. §8| §7шанс "+chanceText(s));
                 }
             }
             case "admin" -> {
@@ -479,50 +502,96 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if((args.length==4 && sub.equals("give")) || (args.length==3 && List.of("giveall","book").contains(sub))) return List.of("1","2","3","4");
         return List.of();
     }
-    private void openCatalog(Player p,int page) {
-        int pageSize=45;
-        int maxPage=Math.max(0,(specs.size()-1)/pageSize);
+    private String categoryName(String key) {
+        return categories.stream().filter(c->c.key().equals(key)).map(Category::title).findFirst().orElse("Зачарования");
+    }
+    private boolean belongsToCategory(Spec s,String category) {
+        return switch(category) {
+            case "swords" -> Set.of("moon","godslayer","vampirism","frost","venom","execution","phantomblade").contains(s.key());
+            case "axes" -> Set.of("woodcutter","cleave","stun","heaviness","axemaster","berserk").contains(s.key());
+            case "mace" -> Set.of("thunder","blackhole","bounce","worldeater").contains(s.key());
+            case "pickaxes" -> Set.of("magnet","drill","autosmelt","veinminer","haste","experience","creatorhand").contains(s.key());
+            case "armor" -> Set.of("fish","dragonbreath","sneak","diver","immunity","softsteps","lavawalker","owl","wisdom","radar","chameleon","immortality","shadow","doublejump","waterwalker").contains(s.key());
+            case "shields" -> Set.of("reflection","secondwind","unbreakable","lightaura","shove","bloodsucker","titanshield").contains(s.key());
+            case "bows" -> Set.of("sniper").contains(s.key());
+            case "spears" -> Set.of("spear_dash","hook","armorbreaker").contains(s.key());
+            case "elytra" -> Set.of("wings","hover","aerodynamics").contains(s.key());
+            default -> false;
+        };
+    }
+    private String currentCatalogCategory(Inventory inv) {
+        ItemStack tab=inv.getItem(0);
+        if(tab==null || !tab.hasItemMeta()) return "swords";
+        String value=tab.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+        return value==null?"swords":value;
+    }
+    private int currentCatalogPage(Inventory inv) {
+        ItemStack marker=inv.getItem(49);
+        if(marker==null || !marker.hasItemMeta()) return 0;
+        Integer value=marker.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+        return value==null?0:value;
+    }
+    private void openCatalog(Player p,int page) { openCatalog(p,"swords",page); }
+    private void openCatalog(Player p,String category,int page) {
+        if(categories.stream().noneMatch(c->c.key().equals(category))) category="swords";
+        List<Spec> filtered=specs.stream().filter(x->belongsToCategory(x,category)).toList();
+        int pageSize=36;
+        int maxPage=Math.max(0,(filtered.size()-1)/pageSize);
         page=Math.max(0,Math.min(page,maxPage));
-        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE);
-        int start=page*pageSize;
-        for(int i=0;i<pageSize && start+i<specs.size();i++) {
-            Spec s=specs.get(start+i);
-            ItemStack icon=new ItemStack(s.icon()); ItemMeta m=icon.getItemMeta();
-            int tier=rarityTier(s);
-            m.setDisplayName(gradient(s.name(),tier));
-            m.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
-                "§7Редкость: "+rarityColor(tier)+rarityName(tier),
-                "§7Уровни: §f"+(s.leveled()?"I–"+roman(s.max()):"Без уровней"),
-                "",s.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы получить книгу"));
-            m.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
-            icon.setItemMeta(m); inv.setItem(i,icon);
+        Inventory inv=Bukkit.createInventory(null,54,CATALOG_TITLE+" §8| §d"+categoryName(category));
+        for(int i=0;i<categories.size();i++) {
+            Category c=categories.get(i);
+            ItemStack tab=new ItemStack(c.icon()); ItemMeta tm=tab.getItemMeta();
+            tm.setDisplayName((c.key().equals(category)?"§d§l▶ ":"§7")+c.title());
+            tm.setLore(List.of("§8Категория зачарований","",c.key().equals(category)?"§aВыбрана":"§eНажми, чтобы открыть"));
+            tm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,c.key());
+            tab.setItemMeta(tm); inv.setItem(i,tab);
         }
-
+        int start=page*pageSize;
+        for(int i=0;i<pageSize && start+i<filtered.size();i++) {
+            Spec spec=filtered.get(start+i);
+            ItemStack icon=new ItemStack(spec.icon()); ItemMeta meta=icon.getItemMeta();
+            int tier=rarityTier(spec);
+            meta.setDisplayName(gradient(specName(spec),tier));
+            meta.setLore(List.of("§7"+specDescription(spec),"","§7Предмет: §f"+appliesTo(spec),
+                "§7Редкость: "+rarityColor(tier)+rarityName(tier),
+                "§7Уровни: §f"+(spec.leveled()?"I–"+roman(maxLevel(spec)):"Без уровней"),
+                "§7Шанс выпадения: §f"+chanceText(spec),
+                "",spec.leveled()?"§eНажми, чтобы выбрать уровень":"§eНажми, чтобы посмотреть / получить"));
+            meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,spec.key());
+            icon.setItemMeta(meta); inv.setItem(9+i,icon);
+        }
         ItemStack previous=new ItemStack(page>0?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta pm=previous.getItemMeta();
         pm.setDisplayName(page>0?"§d← Предыдущая страница":"§8Первая страница");
         pm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        pm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.max(0,page-1));
+        pm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.max(0,page-1));
         previous.setItemMeta(pm); inv.setItem(45,previous);
 
+        ItemStack pageInfo=new ItemStack(Material.CLOCK); ItemMeta pim=pageInfo.getItemMeta();
+        pim.setDisplayName("§dСтраница §f"+(page+1)+"§8/§f"+(maxPage+1));
+        pim.setLore(List.of("§7Категория: §f"+categoryName(category),"§7Всего чар: §f"+filtered.size()));
+        pim.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,page);
+        pageInfo.setItemMeta(pim); inv.setItem(49,pageInfo);
+
         ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
-        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(49,close);
+        cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(50,close);
 
         ItemStack next=new ItemStack(page<maxPage?Material.ARROW:Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta nm=next.getItemMeta();
         nm.setDisplayName(page<maxPage?"§dСледующая страница →":"§8Последняя страница");
         nm.setLore(List.of("§7Страница §f"+(page+1)+"§7/§f"+(maxPage+1)));
-        nm.getPersistentDataContainer().set(levelKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
+        nm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,Math.min(maxPage,page+1));
         next.setItemMeta(nm); inv.setItem(53,next);
         p.openInventory(inv);
     }
-    private void openLevelMenu(Player p,Spec s) {
+    private void openLevelMenu(Player p,Spec s,String category,int page) {
         Inventory inv=Bukkit.createInventory(null,27,LEVEL_TITLE);
         int tier=rarityTier(s);
-        for(int lvl=1;lvl<=s.max();lvl++) {
+        for(int lvl=1;lvl<=maxLevel(s);lvl++) {
             ItemStack icon=new ItemStack(Material.ENCHANTED_BOOK); ItemMeta meta=icon.getItemMeta();
-            meta.setDisplayName(gradient(s.name(),tier)+" §7"+roman(lvl));
-            meta.setLore(List.of("§7"+s.lore(),"","§7Предмет: §f"+appliesTo(s),
+            meta.setDisplayName(gradient(specName(s),tier)+" §7"+roman(lvl));
+            meta.setLore(List.of("§7"+specDescription(s),"","§7Предмет: §f"+appliesTo(s),
                 "§7Редкость: "+rarityColor(tier)+rarityName(tier),
                 "§7Уровень: §f"+roman(lvl),"","§eНажми, чтобы получить книгу"));
             meta.getPersistentDataContainer().set(enchantKey,PersistentDataType.STRING,s.key());
@@ -530,14 +599,17 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             icon.setItemMeta(meta); inv.setItem(10+lvl,icon);
         }
         ItemStack back=new ItemStack(Material.ARROW); ItemMeta bm=back.getItemMeta();
-        bm.setDisplayName("§eНазад к зачарованиям"); back.setItemMeta(bm); inv.setItem(18,back);
+        bm.setDisplayName("§eНазад к зачарованиям");
+        bm.getPersistentDataContainer().set(categoryKey,PersistentDataType.STRING,category);
+        bm.getPersistentDataContainer().set(pageKey,PersistentDataType.INTEGER,page);
+        back.setItemMeta(bm); inv.setItem(18,back);
         ItemStack close=new ItemStack(Material.BARRIER); ItemMeta cm=close.getItemMeta();
         cm.setDisplayName("§cЗакрыть"); close.setItemMeta(cm); inv.setItem(26,close);
         p.openInventory(inv);
     }
     @EventHandler public void onCatalogDrag(InventoryDragEvent e) {
         String title = e.getView().getTitle();
-        if (title.equals(ADMIN_TITLE) || title.equals(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
+        if (title.equals(ADMIN_TITLE) || title.startsWith(CATALOG_TITLE) || title.equals(LEVEL_TITLE)) e.setCancelled(true);
     }
 
     @EventHandler public void onCatalog(InventoryClickEvent e) {
@@ -555,12 +627,12 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
                 double delta=e.getClick()==ClickType.SHIFT_LEFT?0.05:-0.05;
                 double next=Math.max(0,Math.min(100,dropChance(selected)+delta));
                 getConfig().set("drop-chance."+selected.key(),next); saveConfig();
-                p.sendMessage("§dШанс "+selected.name()+": §f"+String.format(Locale.US,"%.3f",next)+"%");
+                p.sendMessage("§dШанс "+specName(selected)+": §f"+String.format(Locale.US,"%.3f",next)+"%");
             } else {
                 List<String> disabled=new ArrayList<>(getConfig().getStringList("disabled-enchants"));
                 if(disabled.contains(selected.key())) disabled.remove(selected.key()); else disabled.add(selected.key());
                 getConfig().set("disabled-enchants",disabled); saveConfig();
-                p.sendMessage("§d"+selected.name()+": "+(isEnabled(selected.key())?"§aвключено":"§cотключено"));
+                p.sendMessage("§d"+specName(selected)+": "+(isEnabled(selected.key())?"§aвключено":"§cотключено"));
             }
             openAdmin(p); return;
         }
@@ -575,47 +647,69 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             ItemStack clicked=e.getCurrentItem();
             if(clicked==null || clicked.getType()==Material.AIR) return;
             if(e.getRawSlot()==26) { p.closeInventory(); return; }
-            if(e.getRawSlot()==18) { openCatalog(p,0); return; }
+            if(e.getRawSlot()==18) {
+                String category=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+                Integer page=clicked.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+                openCatalog(p,category==null?"swords":category,page==null?0:page); return;
+            }
             Spec selected=findSpec(id(clicked));
             if(selected==null || !selected.leveled()) return;
             int lvl=level(clicked);
-            if(lvl<1 || lvl>selected.max()) return;
+            if(lvl<1 || lvl>maxLevel(selected)) return;
             giveBook(p,selected,lvl);
             p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.4f);
-            p.sendMessage(gradient("✦ Получена книга: "+selected.name()+" "+roman(lvl)));
+            p.sendMessage(gradient("✦ Получена книга: "+specName(selected)+" "+roman(lvl)));
             p.closeInventory(); return;
         }
-        if(!title.equals(CATALOG_TITLE)) return;
+        if(!title.startsWith(CATALOG_TITLE)) return;
         e.setCancelled(true);
-        if (!p.hasPermission("voidenchants.admin")) {
-            if (e.getRawSlot() >= 0 && e.getRawSlot() < 54) {
-                ItemStack preview = e.getCurrentItem();
-                if (preview != null && preview.getType() != Material.AIR) {
-                    Spec info = findSpec(id(preview));
-                    if (info != null) sendSpecInfo(p, info);
-                }
-            }
-            return;
-        }
         if(e.getRawSlot()<0 || e.getRawSlot()>=54) return;
         ItemStack clicked=e.getCurrentItem();
         if(clicked==null || clicked.getType()==Material.AIR) return;
-        if(e.getRawSlot()==49 && clicked.getType()==Material.BARRIER) { p.closeInventory(); return; }
-        if(e.getRawSlot()==45 || e.getRawSlot()==53) {
-            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(levelKey,PersistentDataType.INTEGER);
-            if(targetPage!=null) {
-                p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f);
-                openCatalog(p,targetPage);
+        if(e.getRawSlot()<9) {
+            String next=clicked.getItemMeta().getPersistentDataContainer().get(categoryKey,PersistentDataType.STRING);
+            if(next!=null) {
+                p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.3f);
+                openCatalog(p,next,0);
             }
             return;
         }
+        String category=currentCatalogCategory(e.getView().getTopInventory());
+        int page=currentCatalogPage(e.getView().getTopInventory());
+        if(!p.hasPermission("voidenchants.admin")) {
+            if(e.getRawSlot()>=9 && e.getRawSlot()<45) {
+                Spec info=findSpec(id(clicked));
+                if(info!=null) sendSpecInfo(p,info);
+            }
+            return;
+        }
+        if(e.getRawSlot()==50) { p.closeInventory(); return; }
+        if(e.getRawSlot()==49) return;
+        if(e.getRawSlot()==45 || e.getRawSlot()==53) {
+            Integer targetPage=clicked.getItemMeta().getPersistentDataContainer().get(pageKey,PersistentDataType.INTEGER);
+            if(targetPage!=null) {
+                p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.7f,1.2f);
+                openCatalog(p,category,targetPage);
+            }
+            return;
+        }
+        if(e.getRawSlot()<9 || e.getRawSlot()>=45) return;
         Spec selected=findSpec(id(clicked));
         if(selected==null) return;
-        if(selected.leveled()) { openLevelMenu(p,selected); return; }
+        if(selected.leveled()) { openLevelMenu(p,selected,category,page); return; }
         giveBook(p,selected,1);
         p.playSound(p.getLocation(),Sound.UI_BUTTON_CLICK,0.8f,1.5f);
-        p.sendMessage(gradient("✦ Получена книга: "+selected.name()));
+        p.sendMessage(gradient("✦ Получена книга: "+specName(selected)));
         p.closeInventory();
+    }
+
+    @EventHandler public void onCustomEnchantApply(InventoryClickEvent e) {
+        if(e.getRawSlot()!=2 || e.getView().getTopInventory().getType()!=InventoryType.ANVIL) return;
+        if(!(e.getWhoClicked() instanceof Player p)) return;
+        ItemStack left=e.getView().getTopInventory().getItem(0);
+        ItemStack right=e.getView().getTopInventory().getItem(1);
+        if(id(left)!=null || id(right)!=null)
+            p.playSound(p.getLocation(),"voidmain:enchant_apply",SoundCategory.PLAYERS,1.0f,1.0f);
     }
 
     private void immobilize(LivingEntity target) { immobilize(target,40L); }
@@ -688,6 +782,16 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case 4 -> new int[][]{{35,170,255},{125,210,255},{195,235,255},{255,255,255}};
             default -> new int[][]{{45,205,105},{125,235,160},{195,250,215},{255,255,255}};
         };
+        List<String> configured=getConfig().getStringList("style.gradients."+tier);
+        if(configured.size()>=2) {
+            List<int[]> parsed=new ArrayList<>();
+            for(String raw:configured) {
+                String hex=raw.startsWith("#")?raw.substring(1):raw;
+                if(!hex.matches("(?i)[0-9a-f]{6}")) continue;
+                parsed.add(new int[]{Integer.parseInt(hex.substring(0,2),16),Integer.parseInt(hex.substring(2,4),16),Integer.parseInt(hex.substring(4,6),16)});
+            }
+            if(parsed.size()>=2) colors=parsed.toArray(new int[0][]);
+        }
         StringBuilder out = new StringBuilder();
         int visible = Math.max(1, input.length()-1);
         for (int i=0;i<input.length();i++) {
@@ -737,7 +841,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         meta.getPersistentDataContainer().set(itemEnchantKey(enchant.key()),PersistentDataType.INTEGER,lvl);
         List<String> lore=meta.hasLore()?new ArrayList<>(meta.getLore()):new ArrayList<>();
         int tier=rarityTier(enchant);
-        lore.add(gradient(enchant.name(),tier)+" §7"+(enchant.leveled()?roman(lvl):"I"));
+        lore.add(gradient(specName(enchant),tier)+" §7"+(enchant.leveled()?roman(lvl):"I"));
         meta.setLore(lore);
         target.setItemMeta(meta);
     }
@@ -752,7 +856,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(leftBook && rightBook) {
             Spec a=spec(leftKey), b=spec(rightKey);
             if(a==null || b==null || !leftKey.equals(rightKey) || !a.leveled() ||
-               level(left)!=level(right) || level(left)>=a.max()) { e.setResult(null); return; }
+               level(left)!=level(right) || level(left)>=maxLevel(a)) { e.setResult(null); return; }
             e.setResult(book(a,level(left)+1));
             inv.setRepairCost(4+level(left));
             return;
@@ -782,9 +886,9 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         return pool.get(pool.size()-1);
     }
     private int tradeLevel(Spec chosen) {
-        if(!chosen.leveled() || chosen.max()<=1) return 1;
+        if(!chosen.leveled() || maxLevel(chosen)<=1) return 1;
         if(Math.random()<0.55) return 1;
-        return 2+new Random().nextInt(chosen.max()-1);
+        return 2+new Random().nextInt(maxLevel(chosen)-1);
     }
     @EventHandler public void villagerTrade(org.bukkit.event.entity.VillagerAcquireTradeEvent e) {
         if(!getConfig().getBoolean("drops.villager-trade.enabled",true)) return;
@@ -803,12 +907,12 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         Spec chosen=weightedSpec(false);
         if(chosen==null) return;
         // Guaranteed: every villager death gives exactly one custom book.
-        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        int lvl=chosen.leveled()?1+new Random().nextInt(maxLevel(chosen)):1;
         ItemStack reward=book(chosen,lvl);
         e.getDrops().add(reward);
         if(rarityTier(chosen)==1 && getConfig().getBoolean("messages.divine-broadcast.enabled",true)) {
             String message=getConfig().getString("messages.divine-broadcast.format","§d✦ §f{player} нашёл §c[{enchant}]§f!")
-                .replace("{player}",e.getEntity().getName()).replace("{enchant}",chosen.name());
+                .replace("{player}",e.getEntity().getName()).replace("{enchant}",specName(chosen));
             for(Player online:Bukkit.getOnlinePlayers()) online.sendMessage(message);
         }
         getConfig().set("drop-count."+chosen.key(),getConfig().getInt("drop-count."+chosen.key(),0)+1);
@@ -826,7 +930,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
         if(Math.random()*100.0>=chance) return;
         Spec chosen=weightedSpec(false);
         if(chosen==null) return;
-        int lvl=chosen.leveled()?1+new Random().nextInt(chosen.max()):1;
+        int lvl=chosen.leveled()?1+new Random().nextInt(maxLevel(chosen)):1;
         e.getLoot().add(book(chosen,lvl));
     }
 
