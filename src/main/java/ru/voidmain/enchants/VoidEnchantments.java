@@ -347,7 +347,6 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "secondwind" -> { volume=0.85f; pitch=1.0f; layer="minecraft:entity.player.levelup"; }
             case "softsteps","sneak" -> { volume=0.5f; pitch=0.9f; layer="minecraft:block.wool.step"; }
             case "immunity" -> { volume=0.7f; pitch=1.0f; layer="minecraft:block.fire.extinguish"; }
-            case "chameleon" -> { volume=0.75f; pitch=1.0f; layer="minecraft:block.amethyst_block.chime"; }
             case "lavawalker" -> { volume=0.8f; pitch=0.8f; layer="minecraft:block.lava.pop"; }
             case "magnet","experience" -> { volume=0.7f; pitch=1.2f; layer="minecraft:entity.experience_orb.pickup"; }
             case "woodcutter" -> { volume=0.85f; pitch=0.9f; layer="minecraft:block.wood.break"; }
