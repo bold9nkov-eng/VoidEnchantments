@@ -359,7 +359,7 @@ new Spec("titanshield","Щит Титана","Блокирует удар щит
             case "radar","owl","wisdom" -> { w.spawnParticle(Particle.END_ROD,l,14,.3,.55,.3,.015); w.spawnParticle(Particle.ENCHANT,l,18,.35,.5,.35,.25); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_RESONATE,.65f,.7f); }
             case "softsteps","sneak" -> { w.spawnParticle(Particle.CLOUD,l,12,.25,.08,.25,.01); w.spawnParticle(Particle.DUST,l,8,.25,.1,.25,0,new Particle.DustOptions(Color.fromRGB(181,159,220),.8f)); p.playSound(l,Sound.BLOCK_WOOL_STEP,.5f,.7f); }
             case "haste","experience","autosmelt","veinminer","drill" -> { w.spawnParticle(Particle.BLOCK,l,22,.35,.45,.35,.1,Material.DEEPSLATE.createBlockData()); w.spawnParticle(Particle.CRIT,l,8,.2,.25,.2,.04); p.playSound(l,Sound.BLOCK_DEEPSLATE_BREAK,.65f,.8f); }
-            case "spear_dash","doublejump","wings","hover","aerodynamics" -> { w.spawnParticle(Particle.CLOUD,l,24,.35,.25,.35,.045); w.spawnParticle(Particle.END_ROD,l,14,.3,.35,.3,.02); p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.65f,.75f); }
+            case "spear_dash","aerodynamics" -> { w.spawnParticle(Particle.CLOUD,l,24,.35,.25,.35,.045); w.spawnParticle(Particle.END_ROD,l,14,.3,.35,.3,.02); p.playSound(l,Sound.ENTITY_PHANTOM_FLAP,.65f,.75f); }
             case "vampirism" -> { w.spawnParticle(Particle.DUST,l,28,.32,.58,.32,0,new Particle.DustOptions(Color.fromRGB(154,5,28),1.25f)); w.spawnParticle(Particle.CRIT,l,7,.18,.32,.18,.015); spawnVoidRing(l,.62,Color.fromRGB(154,5,28),22); p.playSound(l,Sound.ENTITY_WARDEN_HEARTBEAT,.72f,.72f); }
             default -> { w.spawnParticle(Particle.ENCHANT,l,14,.3,.4,.3,.5); p.playSound(l,Sound.BLOCK_AMETHYST_BLOCK_CHIME,.6f,1.0f); }
         }
