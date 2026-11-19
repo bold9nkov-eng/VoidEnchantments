@@ -1,4 +1,4 @@
-# VoidEnchantments 3.1.0 — Paper 1.21.11 / Java 21
+# VoidEnchantments 3.2.0 — Paper 1.21.11 / Java 21
 # Шансы в drop-chance — веса. Реальный шанс каждого чара рассчитывается
 # относительно суммы весов всех включённых чар (админские чары исключены).
 disabled-enchants: []
@@ -95,7 +95,7 @@ drop-chance:
   thunder: 0.05
   dragonbreath: 0.5
   sneak: 4.0
-  diver: 1.5
+  diver: 0.5
   immunity: 4.0
   softsteps: 4.0
   lavawalker: 0.5
@@ -230,9 +230,9 @@ enchantments:
     rarity-tier: 5
   diver:
     name: "Водолаз"
-    description: "Увеличивает скорость плавания"
+    description: "Умеренно увеличивает скорость плавания (эффект ослаблен в 1,6 раза)"
     max-level: 3
-    rarity-tier: 5
+    rarity-tier: 3
   immunity:
     name: "Иммунитет"
     description: "Шанс снять отрицательные эффекты"
